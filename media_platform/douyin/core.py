@@ -199,7 +199,8 @@ class DouYinCrawler(AbstractCrawler):
                 headless=headless,
                 proxy=playwright_proxy,  # type: ignore
                 viewport={"width": 1920, "height": 1080},
-                user_agent=user_agent
+                user_agent=user_agent,
+                executable_path=config.EXECUTABLE_PATH
             )  # type: ignore
             return browser_context
         else:

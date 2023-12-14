@@ -262,7 +262,9 @@ class BilibiliCrawler(AbstractCrawler):
                 headless=headless,
                 proxy=playwright_proxy,  # type: ignore
                 viewport={"width": 1920, "height": 1080},
-                user_agent=user_agent
+                user_agent=user_agent,
+                # executable_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                executable_path=config.EXECUTABLE_PATH
             )
             return browser_context
         else:

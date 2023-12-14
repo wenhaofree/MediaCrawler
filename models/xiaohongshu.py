@@ -5,7 +5,7 @@ from typing import Dict, List
 from tortoise import fields
 from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.models import Model
-
+from . import notion_xhs
 import config
 from tools import utils
 from var import crawler_type_var
@@ -99,6 +99,27 @@ async def update_xhs_note(note_item: Dict):
             note_data = note_pydantic(**local_db_item)
             note_pydantic.validate(note_data)
             await XHSNote.filter(note_id=note_id).update(**note_data.dict())
+    elif config.IS_SAVED_NOTION:
+        page=notion_xhs.Page(
+            content=local_db_item.get("desc"),
+            type=local_db_item.get("type"),
+            liked_count=local_db_item.get("liked_count"),
+            collected_count=local_db_item.get("collected_count"),
+            comment_count=local_db_item.get("comment_count"),
+            share_count=local_db_item.get("share_count"),
+            ip_location=local_db_item.get("ip_location"),
+            author=local_db_item.get("nickname"),
+            author_avatar=local_db_item.get("avatar"),
+            image_list=local_db_item.get("image_list"),
+            title=local_db_item.get("title"),
+            create_time=local_db_item.get("time"),
+            update_time=local_db_item.get("last_update_time"),
+            last_modify_ts=local_db_item.get("last_modify_ts"),
+            note_url=local_db_item.get("note_url"),
+            node_id=local_db_item.get("note_id")
+        )
+        # for循环每次都会调用需要处理
+        notion_xhs.notion_handler(page)
     else:
         # Below is a simple way to save it in CSV format.
         pathlib.Path(f"data/xhs").mkdir(parents=True, exist_ok=True)
