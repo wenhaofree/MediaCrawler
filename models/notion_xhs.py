@@ -268,8 +268,10 @@ def time_fromat(timestamp):
     return formatted_date
 
 def main():
-    client = NotionClient()
-    client.create_page("page")
+    # client = NotionClient()
+    # client.create_page("page")
+
+    notion_handler("page")
 
 if __name__ == '__main__':
     main()
