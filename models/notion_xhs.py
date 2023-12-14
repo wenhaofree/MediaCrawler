@@ -207,7 +207,15 @@ class NotionClient:
         return property_name_set
 
 import json
+import os
 def notion_handler(page):
+    node_id=page.node_id
+    node_ids = notion_data_read()
+    if node_id not in node_ids:
+        notion_data_save(page)
+    else:
+        print(f'[notion.json已存在:{page.node_id}]')
+def notion_data_save(page):
     client = NotionClient()
     insert_notion_list=[]
     if page is not None:
@@ -222,7 +230,8 @@ def notion_handler(page):
         insert_notion_list.append(insert_notion_data)
     
     # 插入notion的数据保存文件中
-    file_path="notion-xhs.json"
+    file_name="notion-xhs.json"
+    file_path = os.path.join(os.path.dirname(__file__), file_name)
     with open(file_path, 'a') as f:
         for i in insert_notion_list:
             json.dump(i, f)
@@ -230,23 +239,24 @@ def notion_handler(page):
         f.close()
         print(f'[notion.json保存:{len(insert_notion_list)}条数据完成]')
         
-# def notion_data_read():
-#     # 打开已经保存的文件
-#         message_ids = {}
-#         file_name = f'{search}-noiton.json'
-#         file_path = os.path.join(os.path.dirname(__file__), file_name)
-#         if os.path.exists(file_path):
-#             try:
-#                 with open(file_path, 'r', encoding='utf-8') as f:
-#                     for line in f:
-#                         json_data = json.loads(line)
-#                         node_id = json_data['node_id']
-#                         page_id = json_data['page_id']
-#                         message_ids[node_id] = page_id
-#             except Exception as e:
-#                 print(f'更新异常:{e}')
-#                 pass
-        
+
+# 读取文件中Notion已保存的数据
+def notion_data_read():
+    message_ids = set()
+    file_name="notion-xhs.json"
+    file_path = os.path.join(os.path.dirname(__file__), file_name)
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    json_data = json.loads(line)
+                    node_id = json_data['node_id']
+                    message_ids.add(node_id)
+        except Exception as e:
+            print(f'打开文件异常更新异常:{e}')
+            pass
+    return message_ids
+    
 
 
 # 将时间戳转换为datetime对象

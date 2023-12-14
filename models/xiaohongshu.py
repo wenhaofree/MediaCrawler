@@ -118,7 +118,7 @@ async def update_xhs_note(note_item: Dict):
             note_url=local_db_item.get("note_url"),
             node_id=local_db_item.get("note_id")
         )
-        # for循环每次都会调用需要处理
+        # for循环每次都会调用需要处理-不考虑性能-直接走功能实现-FWH
         notion_xhs.notion_handler(page)
     else:
         # Below is a simple way to save it in CSV format.
