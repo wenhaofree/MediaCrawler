@@ -99,6 +99,27 @@ async def update_bilibili_video(video_item: Dict):
             bilibili_data = bilibili_video_pydantic(**local_db_item)
             bilibili_video_pydantic.model_validate(bilibili_data)
             await BilibiliVideo.filter(video_id=video_id).update(**bilibili_data.model_dump())
+    elif config.IS_SAVED_NOTION:
+        from . import notion_bili
+        print(local_db_item)
+        page=notion_bili.Page(
+            keywords=config.KEYWORDS,
+            title=local_db_item.get("title"),
+            content=local_db_item.get("desc"),
+            liked_count=local_db_item.get("liked_count"),
+            collected_count=local_db_item.get("video_play_count"),            
+            comment_count=local_db_item.get("video_comment"),
+            daimaku_count=local_db_item.get("video_danmaku"),
+            video_url=local_db_item.get("video_url"),
+            video_cover_url=local_db_item.get("video_cover_url"),
+            video_id=local_db_item.get("video_id"),
+            user_id=local_db_item.get("user_id"),
+            create_time=local_db_item.get("create_time"),
+            video_type=local_db_item.get("video_type"),
+            nick_name=local_db_item.get("nickname"),
+            avatar=local_db_item.get("avatar")
+        )
+        notion_bili.notion_handler(page)
     else:
         # Below is a simple way to save it in CSV format.
         pathlib.Path(f"data/bilibili").mkdir(parents=True, exist_ok=True)

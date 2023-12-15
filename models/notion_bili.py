@@ -1,24 +1,20 @@
 from notion_client import Client
 
 class Page:
-    def __init__(self,keywords,title,content,liked_count,collected_count,comment_count,share_count,aweme_url,create_time,aweme_type,ip_location,aweme_id,user_id,sec_uid,short_user_id,user_unique_id,user_signature,nick_name,avatar):
+    def __init__(self,keywords,title,content,liked_count,collected_count,comment_count,daimaku_count,video_url,video_cover_url,video_id,user_id,create_time,video_type,nick_name,avatar):
         self.keywords = keywords
         self.title = title
         self.content = content
         self.liked_count = liked_count
         self.collected_count = collected_count
         self.comment_count = comment_count
-        self.share_count = share_count
-        self.aweme_url = aweme_url
-        self.create_time = create_time
-        self.aweme_type = aweme_type
-        self.ip_location = ip_location
-        self.aweme_id = aweme_id
+        self.daimaku_count = daimaku_count
+        self.video_url = video_url
+        self.video_cover_url = video_cover_url
+        self.video_id = video_id
         self.user_id = user_id
-        self.sec_uid = sec_uid
-        self.short_user_id = short_user_id
-        self.user_unique_id = user_unique_id
-        self.user_signature = user_signature
+        self.create_time = create_time
+        self.video_type = video_type
         self.nick_name = nick_name
         self.avatar = avatar
 
@@ -31,7 +27,7 @@ class NotionClient:
         global global_notion
         global global_database_id
         global_token = "secret_SGSgYlUHk8knQRLcwJr1alzjzVTwXFwrr0UDBawy0Sw"
-        global_database_id = "04bbd91c482548b1be8aefd6f7977695"
+        global_database_id = "b3820f82e6904d1f84552e9a880cea13"
         global_notion = Client(auth=global_token)
         global_query_results = global_notion.databases.query(database_id=global_database_id)
         print('开始Notion自动化处理数据...')
@@ -60,7 +56,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.content
+                                'content': page.title
                             }
                         }
                     ]
@@ -74,11 +70,11 @@ class NotionClient:
                         }
                     ]
                 },
-                'Aweme_id': {
+                'Video_id': {
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.aweme_id
+                                'content': page.video_id
                             }
                         }
                     ]
@@ -92,42 +88,6 @@ class NotionClient:
                         }
                     ]
                 },
-                'Sec_uid': {
-                    'rich_text': [
-                        {
-                            'text': {
-                                'content': page.sec_uid
-                            }
-                        }
-                    ]
-                },
-                'Short_user_id': {
-                    'rich_text': [
-                        {
-                            'text': {
-                                'content': page.short_user_id
-                            }
-                        }
-                    ]
-                },
-                'User_unique_id': {
-                    'rich_text': [
-                        {
-                            'text': {
-                                'content': page.user_unique_id if page.user_unique_id is not None else ""
-                            }
-                        }
-                    ]
-                },
-                'User_signature': {
-                    'rich_text': [
-                        {
-                            'text': {
-                                'content': page.user_signature if page.user_signature is not None else ""
-                            }
-                        }
-                    ]
-                },
                 'nick_name': {
                     'rich_text': [
                         {
@@ -137,9 +97,9 @@ class NotionClient:
                         }
                     ]
                 },
-                'Aweme_type': {
+                'Video_type': {
                     'select':{
-                        'name': page.aweme_type
+                        'name': page.video_type
                     }
                 },
                 '关键词': {
@@ -150,25 +110,23 @@ class NotionClient:
                 "点赞数": {
                     "number": int(page.liked_count) if page.liked_count is not None else 0
                 },
-                "收藏数": {
+                "播放数": {
                     "number": int(page.collected_count) if page.collected_count is not None else 0
                 },
                 "评论数": {
                     "number": int(page.comment_count) if page.comment_count is not None else 0
                 },
-                "转发数": {
-                    "number": int(page.share_count) if page.share_count is not None else 0
-                },
-                '发布地': {
-                    'select':{
-                        'name': page.ip_location if page.ip_location != "" else "未知"
-                    }
+                "弹幕数": {
+                    "number": int(page.daimaku_count) if page.daimaku_count is not None else 0
                 },
                 "avatar_url": {
                     'url': page.avatar
                 },
-                "aweme_url": {
-                    'url': page.aweme_url
+                "Video_url": {
+                    'url': page.video_url
+                },
+                "Video_cover_url": {
+                    'url': page.video_cover_url
                 },
                 "创建时间": {
                     "date": {
@@ -252,7 +210,7 @@ class NotionClient:
 import json
 import os
 def notion_handler(page):
-    node_id=page.aweme_id
+    node_id=page.video_id
     node_ids = notion_data_read()
     if node_id not in node_ids:
         notion_data_save(page)
@@ -269,12 +227,12 @@ def notion_data_save(page):
         new_page=client.create_page(page)
 
         page_id=new_page["id"]
-        node_id = new_page["properties"]["Aweme_id"]["rich_text"][0]["text"]["content"]
+        node_id = new_page["properties"]["Video_id"]["rich_text"][0]["text"]["content"]
         insert_notion_data = {'page_id': page_id, 'node_id': node_id}
         insert_notion_list.append(insert_notion_data)
     
     # 插入notion的数据保存文件中
-    file_name="notion-dy.json"
+    file_name="notion-bili.json"
     file_path = os.path.join(os.path.dirname(__file__), file_name)
     with open(file_path, 'a') as f:
         for i in insert_notion_list:
@@ -287,7 +245,7 @@ def notion_data_save(page):
 # 读取文件中Notion已保存的数据
 def notion_data_read():
     message_ids = set()
-    file_name="notion-dy.json"
+    file_name="notion-bili.json"
     file_path = os.path.join(os.path.dirname(__file__), file_name)
     if os.path.exists(file_path):
         try:
@@ -306,7 +264,6 @@ def notion_data_read():
 # 将时间戳转换为datetime对象
 import datetime
 def time_fromat(timestamp):
-    # timestamp=timestamp/1000
     dt = datetime.datetime.fromtimestamp(timestamp)
     formatted_date = dt.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_date
@@ -314,27 +271,7 @@ def time_fromat(timestamp):
 def test():
     client = NotionClient()
     create_time=time_fromat(1625110200)
-    page=Page(
-        title="title",
-        content="content",
-        liked_count=1,
-        collected_count=1,
-        comment_count=1,
-        share_count=1,
-        aweme_url="aweme_url",
-        create_time=create_time,
-        aweme_type="aweme_type",
-        ip_location="ip_location",
-        author_avatar="author_avatar",
-        aweme_id="aweme_id",
-        user_id="user_id",
-        sec_uid="sec_uid",
-        short_user_id="short_user_id",
-        user_unique_id="user_unique_id",
-        user_signature="user_signature",
-        nick_name="nick_name",
-        avatar="avatar"
-    )
+    page = Page(keywords="keywords",title="title",content="content",liked_count=1,collected_count=1,comment_count=1,daimaku_count=1,video_url="video_url",video_cover_url="video_cover_url",video_id="video_id",create_time=create_time,video_type="video_type",nick_name="nick_name",avatar="avatar")
     client.create_page(page)
 
 
