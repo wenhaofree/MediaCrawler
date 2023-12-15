@@ -1,7 +1,8 @@
 from notion_client import Client
 
 class Page:
-    def __init__(self,title,content,liked_count,collected_count,comment_count,share_count,aweme_url,create_time,aweme_type,ip_location,aweme_id,user_id,sec_uid,short_user_id,user_unique_id,user_signature,nick_name,avatar):
+    def __init__(self,keywords,title,content,liked_count,collected_count,comment_count,share_count,aweme_url,create_time,aweme_type,ip_location,aweme_id,user_id,sec_uid,short_user_id,user_unique_id,user_signature,nick_name,avatar):
+        self.keywords = keywords
         self.title = title
         self.content = content
         self.liked_count = liked_count
@@ -160,17 +161,22 @@ class NotionClient:
                         'name': page.aweme_type
                     }
                 },
+                '关键词': {
+                    'select':{
+                        'name': page.keywords
+                    }
+                },
                 "点赞数": {
-                    "number": int(page.liked_count) if page.liked_count is None else 0
+                    "number": int(page.liked_count) if page.liked_count is not None else 0
                 },
                 "收藏数": {
-                    "number": int(page.collected_count) if page.collected_count is None else 0
+                    "number": int(page.collected_count) if page.collected_count is not None else 0
                 },
                 "评论数": {
-                    "number": int(page.comment_count) if page.comment_count is None else 0
+                    "number": int(page.comment_count) if page.comment_count is not None else 0
                 },
                 "转发数": {
-                    "number": int(page.share_count) if page.share_count is None else 0
+                    "number": int(page.share_count) if page.share_count is not None else 0
                 },
                 '发布地': {
                     'select':{
@@ -190,7 +196,7 @@ class NotionClient:
                 }
             }
         )
-        print(new_page)
+        # print(new_page)
         return new_page
 
 

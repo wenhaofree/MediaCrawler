@@ -103,8 +103,10 @@ async def update_douyin_aweme(aweme_item: Dict):
             douyin_aweme_pydantic.validate(douyin_data)
             await DouyinAweme.filter(aweme_id=aweme_id).update(**douyin_data.dict())
     elif config.IS_SAVED_NOTION:
+        # notion存储
         from . import notion_dy
         page=notion_dy.Page(
+            keywords=config.KEYWORDS,
             title=local_db_item.get('title'),
             content=local_db_item.get('desc'),
             liked_count=local_db_item.get('liked_count'),
