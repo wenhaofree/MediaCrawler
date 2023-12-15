@@ -80,7 +80,7 @@ async def update_kuaishou_video(video_item: Dict):
         "video_cover_url": photo_info.get("coverUrl", ""),
         "video_play_url": photo_info.get("photoUrl", ""),
     }
-    print(f"Kuaishou video id:{video_id}, title:{local_db_item.get('title')}")
+    # print(f"Kuaishou video id:{video_id}, title:{local_db_item.get('title')}")
     if config.IS_SAVED_DATABASED:
         if not await KuaishouVideo.filter(video_id=video_id).exists():
             local_db_item["add_ts"] = utils.get_current_timestamp()
@@ -94,6 +94,25 @@ async def update_kuaishou_video(video_item: Dict):
             kuaishou_data = kuaishou_video_pydantic(**local_db_item)
             kuaishou_video_pydantic.model_validate(kuaishou_data)
             await KuaishouVideo.filter(video_id=video_id).update(**kuaishou_data.model_dump())
+    elif config.IS_SAVED_NOTION:
+        from . import notion_ks
+        page=notion_ks.Page(
+            keywords=config.KEYWORDS,
+            title=local_db_item.get("title"),
+            content=local_db_item.get("desc"),
+            video_id=local_db_item.get("video_id"),
+            user_id=local_db_item.get("user_id"),
+            liked_count=local_db_item.get("liked_count"),
+            viewd_count=local_db_item.get("viewd_count"),
+            video_url=local_db_item.get("video_url"),
+            video_cover_url=local_db_item.get("video_cover_url"),
+            video_play_url=local_db_item.get("video_play_url"),
+            create_time=local_db_item.get("create_time"),
+            video_type=local_db_item.get("video_type"),
+            nick_name=local_db_item.get("nickname"),
+            avatar=local_db_item.get("avatar")
+        )
+        notion_ks.notion_handler(page)
     else:
         # Below is a simple way to save it in CSV format.
         pathlib.Path(f"data/kuaishou").mkdir(parents=True, exist_ok=True)
