@@ -1,18 +1,17 @@
 from notion_client import Client
 
 class Page:
-    def __init__(self,title,content,liked_count,collected_count,comment_count,share_count,avame_url,create_time,aweme_type,ip_location,author_avatar,aweme_id,user_id,sec_uid,short_user_id,user_unique_id,user_signature,nick_name,avatar):
+    def __init__(self,title,content,liked_count,collected_count,comment_count,share_count,aweme_url,create_time,aweme_type,ip_location,aweme_id,user_id,sec_uid,short_user_id,user_unique_id,user_signature,nick_name,avatar):
         self.title = title
         self.content = content
         self.liked_count = liked_count
         self.collected_count = collected_count
         self.comment_count = comment_count
         self.share_count = share_count
-        self.avame_url = avame_url
+        self.aweme_url = aweme_url
         self.create_time = create_time
         self.aweme_type = aweme_type
         self.ip_location = ip_location
-        self.author_avatar = author_avatar
         self.aweme_id = aweme_id
         self.user_id = user_id
         self.sec_uid = sec_uid
@@ -84,11 +83,11 @@ class NotionClient:
                         }
                     ]
                 },
-                '作者': {
+                'nick_name': {
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.author
+                                'content': page.nick_name
                             }
                         }
                     ]
@@ -97,7 +96,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.image_list
+                                'content': page.aweme_id
                             }
                         }
                     ]
@@ -106,7 +105,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.node_id
+                                'content': page.user_id
                             }
                         }
                     ]
@@ -115,7 +114,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.node_id
+                                'content': page.sec_uid
                             }
                         }
                     ]
@@ -124,7 +123,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.node_id
+                                'content': page.short_user_id
                             }
                         }
                     ]
@@ -133,7 +132,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.node_id
+                                'content': page.user_unique_id if page.user_unique_id is not None else ""
                             }
                         }
                     ]
@@ -142,7 +141,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.node_id
+                                'content': page.user_signature if page.user_signature is not None else ""
                             }
                         }
                     ]
@@ -151,27 +150,27 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page.node_id
+                                'content': page.nick_name
                             }
                         }
                     ]
                 },
                 'Aweme_type': {
                     'select':{
-                        'name': page.type
+                        'name': page.aweme_type
                     }
                 },
                 "点赞数": {
-                    "number": int(page.liked_count)
+                    "number": int(page.liked_count) if page.liked_count is None else 0
                 },
                 "收藏数": {
-                    "number": int(page.collected_count)
+                    "number": int(page.collected_count) if page.collected_count is None else 0
                 },
                 "评论数": {
-                    "number": int(page.comment_count)
+                    "number": int(page.comment_count) if page.comment_count is None else 0
                 },
                 "转发数": {
-                    "number": int(page.share_count)
+                    "number": int(page.share_count) if page.share_count is None else 0
                 },
                 '发布地': {
                     'select':{
@@ -179,10 +178,10 @@ class NotionClient:
                     }
                 },
                 "avatar_url": {
-                    'url': page.author_avatar
+                    'url': page.avatar
                 },
                 "aweme_url": {
-                    'url': page.note_url
+                    'url': page.aweme_url
                 },
                 "创建时间": {
                     "date": {
@@ -191,6 +190,7 @@ class NotionClient:
                 }
             }
         )
+        print(new_page)
         return new_page
 
 
@@ -265,28 +265,29 @@ class NotionClient:
 import json
 import os
 def notion_handler(page):
-    node_id=page.node_id
+    node_id=page.aweme_id
     node_ids = notion_data_read()
     if node_id not in node_ids:
         notion_data_save(page)
     else:
-        print(f'[notion.json已存在:{page.node_id}]')
+        print(f'[notion.json已存在:{node_id}]')
 def notion_data_save(page):
     client = NotionClient()
     insert_notion_list=[]
     if page is not None:
-        page.create_time = time_fromat(page.create_time)
-        page.last_modify_ts = time_fromat(page.last_modify_ts)
-        page.update_time = time_fromat(page.update_time)
+        if page.create_time is None:
+            page.create_time = "2021-01-01 00:00:00"
+        else:
+            page.create_time = time_fromat(page.create_time)
         new_page=client.create_page(page)
 
         page_id=new_page["id"]
-        node_id = new_page["properties"]["Node_id"]["rich_text"][0]["text"]["content"]
+        node_id = new_page["properties"]["Aweme_id"]["rich_text"][0]["text"]["content"]
         insert_notion_data = {'page_id': page_id, 'node_id': node_id}
         insert_notion_list.append(insert_notion_data)
     
     # 插入notion的数据保存文件中
-    file_name="notion-xhs.json"
+    file_name="notion-dy.json"
     file_path = os.path.join(os.path.dirname(__file__), file_name)
     with open(file_path, 'a') as f:
         for i in insert_notion_list:
@@ -299,7 +300,7 @@ def notion_data_save(page):
 # 读取文件中Notion已保存的数据
 def notion_data_read():
     message_ids = set()
-    file_name="notion-xhs.json"
+    file_name="notion-dy.json"
     file_path = os.path.join(os.path.dirname(__file__), file_name)
     if os.path.exists(file_path):
         try:
@@ -318,13 +319,14 @@ def notion_data_read():
 # 将时间戳转换为datetime对象
 import datetime
 def time_fromat(timestamp):
-    timestamp=timestamp/1000
+    # timestamp=timestamp/1000
     dt = datetime.datetime.fromtimestamp(timestamp)
     formatted_date = dt.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_date
 
 def test():
     client = NotionClient()
+    create_time=time_fromat(1625110200)
     page=Page(
         title="title",
         content="content",
@@ -332,8 +334,8 @@ def test():
         collected_count=1,
         comment_count=1,
         share_count=1,
-        avame_url="avame_url",
-        create_time="create_time",
+        aweme_url="aweme_url",
+        create_time=create_time,
         aweme_type="aweme_type",
         ip_location="ip_location",
         author_avatar="author_avatar",

@@ -102,6 +102,29 @@ async def update_douyin_aweme(aweme_item: Dict):
             douyin_data = douyin_aweme_pydantic(**local_db_item)
             douyin_aweme_pydantic.validate(douyin_data)
             await DouyinAweme.filter(aweme_id=aweme_id).update(**douyin_data.dict())
+    elif config.IS_SAVED_NOTION:
+        from . import notion_dy
+        page=notion_dy.Page(
+            title=local_db_item.get('title'),
+            content=local_db_item.get('desc'),
+            liked_count=local_db_item.get('liked_count'),
+            collected_count=local_db_item.get('collected_count'),
+            comment_count=local_db_item.get('comment_count'),
+            share_count=local_db_item.get('share_count'),
+            ip_location=local_db_item.get('ip_location'),
+            aweme_url=local_db_item.get('aweme_url'),
+            create_time=local_db_item.get('create_time'),
+            aweme_type=local_db_item.get('aweme_type'),
+            user_id=local_db_item.get('user_id'),
+            sec_uid=local_db_item.get('sec_uid'),
+            short_user_id=local_db_item.get('short_user_id'),
+            user_unique_id=local_db_item.get('user_unique_id'),
+            user_signature=local_db_item.get('user_signature'),
+            nick_name=local_db_item.get('nickname'),
+            avatar=local_db_item.get('avatar'),
+            aweme_id=local_db_item.get('aweme_id')
+        )
+        notion_dy.notion_handler(page)
     else:
         # Below is a simple way to save it in CSV format.
         pathlib.Path(f"data/dy").mkdir(parents=True, exist_ok=True)
