@@ -5,7 +5,7 @@ from typing import Dict, List
 from tortoise import fields
 from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.models import Model
-from . import notion_xhs
+
 import config
 from tools import utils
 from var import crawler_type_var
@@ -100,7 +100,9 @@ async def update_xhs_note(note_item: Dict):
             note_pydantic.validate(note_data)
             await XHSNote.filter(note_id=note_id).update(**note_data.dict())
     elif config.IS_SAVED_NOTION:
+        from . import notion_xhs
         page=notion_xhs.Page(
+            keywords=config.KEYWORDS,
             content=local_db_item.get("desc"),
             type=local_db_item.get("type"),
             liked_count=local_db_item.get("liked_count"),

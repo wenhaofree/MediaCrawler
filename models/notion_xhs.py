@@ -1,7 +1,8 @@
 from notion_client import Client
 
 class Page:
-    def __init__(self, content,type,liked_count,collected_count,comment_count,share_count,ip_location,author,author_avatar,image_list,title,create_time,update_time,last_modify_ts,note_url,node_id):
+    def __init__(self,keywords, content,type,liked_count,collected_count,comment_count,share_count,ip_location,author,author_avatar,image_list,title,create_time,update_time,last_modify_ts,note_url,node_id):
+        self.keywords = keywords
         self.content = content
         self.type = type
         self.liked_count = liked_count
@@ -132,6 +133,11 @@ class NotionClient:
                     "date": {
                         "start": page.last_modify_ts,
                     }
+                },
+                '关键词': {
+                    'select':{
+                        'name': page.keywords
+                    }
                 }
             }
         )
@@ -214,7 +220,7 @@ def notion_handler(page):
     if node_id not in node_ids:
         notion_data_save(page)
     else:
-        print(f'[notion.json已存在:{page.node_id}]')
+        print(f'[notion.json已存在:{node_id}]')
 def notion_data_save(page):
     client = NotionClient()
     insert_notion_list=[]
@@ -267,12 +273,12 @@ def time_fromat(timestamp):
     formatted_date = dt.strftime("%Y-%m-%d %H:%M:%S")
     return formatted_date
 
-def main():
+def test():
     # client = NotionClient()
     # client.create_page("page")
 
     notion_handler("page")
 
 if __name__ == '__main__':
-    main()
+    test()
     
