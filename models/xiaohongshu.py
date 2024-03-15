@@ -121,6 +121,7 @@ async def update_xhs_note(note_item: Dict):
             node_id=local_db_item.get("note_id")
         )
         # for循环每次都会调用需要处理-不考虑性能-直接走功能实现-FWH
+        #TODO-fwh-先生成Excel,再同步到notion中
         notion_xhs.notion_handler(page)
     else:
         # Below is a simple way to save it in CSV format.

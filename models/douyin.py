@@ -126,7 +126,10 @@ async def update_douyin_aweme(aweme_item: Dict):
             avatar=local_db_item.get('avatar'),
             aweme_id=local_db_item.get('aweme_id')
         )
-        notion_dy.notion_handler(page)
+        try:
+            notion_dy.notion_handler(page)
+        except Exception as e:
+            print(f"notion_handler error: {e}")
     else:
         # Below is a simple way to save it in CSV format.
         pathlib.Path(f"data/dy").mkdir(parents=True, exist_ok=True)

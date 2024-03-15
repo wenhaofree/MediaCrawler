@@ -1,5 +1,6 @@
 ## 个人注意事项:
-1. 搜索信息关键词,都在config目录的base_config里.  新增:executable_path=config.EXECUTABLE_PATH 
+1. 搜索信息关键词,都在config目录的base_config里.  新增代码配置指定浏览器:executable_path=config.EXECUTABLE_PATH 
+
 2. 抖音登录需要二维码还有短信验证码登录. 需要接通安卓手机操作
 3. 小红书登录,二维码不回显有问题
 4. B站顺利
@@ -7,6 +8,19 @@
 6. 解决方式采用cooker形式登录获取数据
 7. 数据限制20条,但是重新开始会出现重复采集的情况,需要用去重逻辑,根据node_id唯一值
 8. 增加Notion存储数据
+
+## 举例小红书爬取-编程版
+1. config目录，base_config配置文件，
+   修改xhs，搜索关键词， 登录方式Cookie，网页获取Cookie信息， 指定需要爬取的笔记ID列表（貌似影响不大），配置爬取数量
+2. 程序运行：
+    main.py运行
+3. 数据结果：
+      - 笔记信息同步到Notion中，同时可以通过修改配置，选择本地Excel还是Notion
+      - 笔记评论信息，再Excel文件夹中 data/xhs.  没有做Notion处理
+      - 同步过Notion的数据，会记录在Notion-xhs.json文件中，避免重复采集。
+      - 目前配置爬取数据200条
+   
+
 
 ## 本地使用方法
 

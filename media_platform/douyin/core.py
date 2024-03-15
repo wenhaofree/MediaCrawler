@@ -101,7 +101,9 @@ class DouYinCrawler(AbstractCrawler):
                     aweme_list.append(aweme_info.get("aweme_id", ""))
                     await douyin.update_douyin_aweme(aweme_item=aweme_info)
             utils.logger.info(f"keyword:{keyword}, aweme_list:{aweme_list}")
-            await self.batch_get_note_comments(aweme_list)
+            # TODO-fwh-为空不要评论了
+            if len(aweme_list)>0:
+                await self.batch_get_note_comments(aweme_list)
 
     async def get_specified_awemes(self):
         """Get the information and comments of the specified post"""
