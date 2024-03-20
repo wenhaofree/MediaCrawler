@@ -8,8 +8,8 @@ from base.base_crawler import AbstractCrawler
 from media_platform.bilibili import BilibiliCrawler
 from media_platform.douyin import DouYinCrawler
 from media_platform.kuaishou import KuaishouCrawler
+from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
-from proxy import proxy_account_pool
 
 
 class CrawlerFactory:
@@ -17,7 +17,8 @@ class CrawlerFactory:
         "xhs": XiaoHongShuCrawler,
         "dy": DouYinCrawler,
         "ks": KuaishouCrawler,
-        "bili": BilibiliCrawler
+        "bili": BilibiliCrawler,
+        "wb": WeiboCrawler
     }
 
     @staticmethod
@@ -31,15 +32,15 @@ class CrawlerFactory:
 async def main():
     # define command line params ...
     parser = argparse.ArgumentParser(description='Media crawler program.')
-    parser.add_argument('--platform', type=str, help='Media platform select (xhs | dy | ks | bili)',
-                        choices=["xhs", "dy", "ks", "bili"], default=config.PLATFORM)
+    parser.add_argument('--platform', type=str, help='Media platform select (xhs | dy | ks | bili | wb)',
+                        choices=["xhs", "dy", "ks", "bili", "wb"], default=config.PLATFORM)
     parser.add_argument('--lt', type=str, help='Login type (qrcode | phone | cookie)',
                         choices=["qrcode", "phone", "cookie"], default=config.LOGIN_TYPE)
-    parser.add_argument('--type', type=str, help='crawler type (search | detail)',
-                        choices=["search", "detail"], default=config.CRAWLER_TYPE)
+    parser.add_argument('--type', type=str, help='crawler type (search | detail | creator)',
+                        choices=["search", "detail", "creator"], default=config.CRAWLER_TYPE)
 
     # init db
-    if config.IS_SAVED_DATABASED:
+    if config.SAVE_DATA_OPTION == "db":
         await db.init_db()
 
     args = parser.parse_args()
@@ -50,6 +51,9 @@ async def main():
         crawler_type=args.type
     )
     await crawler.start()
+    
+    if config.SAVE_DATA_OPTION == "db":
+        await db.close()
 
 
 if __name__ == '__main__':

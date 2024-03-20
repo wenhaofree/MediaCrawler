@@ -10,7 +10,7 @@ from playwright.async_api import BrowserContext, Page
 import config
 from tools import utils
 
-from .exception import DataFetchError, IPBlockError
+from .exception import DataFetchError
 from .graphql import KuaiShouGraphQL
 
 
@@ -56,15 +56,23 @@ class KuaiShouClient:
         return await self.request(method="POST", url=f"{self._host}{uri}",
                                   data=json_str, headers=self.headers)
 
-    @staticmethod
-    async def pong() -> bool:
+    async def pong(self) -> bool:
         """get a note to check if login state is ok"""
-        utils.logger.info("Begin pong kuaishou...")
+        utils.logger.info("[KuaiShouClient.pong] Begin pong kuaishou...")
         ping_flag = False
         try:
-            pass
+            post_data = {
+                "operationName": "visionProfileUserList",
+                "variables": {
+                    "ftype": 1,
+                },
+                "query": self.graphql.get("vision_profile")
+            }
+            res = await self.post("", post_data)
+            if res.get("visionProfileUserList", {}).get("result") == 1:
+                ping_flag = True
         except Exception as e:
-            utils.logger.error(f"Pong kuaishou failed: {e}, and try to login again...")
+            utils.logger.error(f"[KuaiShouClient.pong] Pong kuaishou failed: {e}, and try to login again...")
             ping_flag = False
         return ping_flag
 
@@ -137,31 +145,17 @@ class KuaiShouClient:
 
         result = []
         pcursor = ""
-        count = 0  # 计数器，记录已获取的评论数量
 
-        while pcursor != "no_more" and (
-                config.MAX_COMMENTS_PER_POST == 0 or count < config.MAX_COMMENTS_PER_POST):
+        while pcursor != "no_more":
             comments_res = await self.get_video_comments(photo_id, pcursor)
             vision_commen_list = comments_res.get("visionCommentList", {})
             pcursor = vision_commen_list.get("pcursor", "")
             comments = vision_commen_list.get("rootComments", [])
 
-            filtered_comments = []  # 存储经过关键词筛选后的评论
-
-            for comment in comments:
-                content = comment.get("content", "")
-
-                if not config.COMMENT_KEYWORDS or any(keyword in content for keyword in config.COMMENT_KEYWORDS):
-                    filtered_comments.append(comment)
-
-                    count += 1
-                    if config.MAX_COMMENTS_PER_POST != 0 and count >= config.MAX_COMMENTS_PER_POST:
-                        break
-
             if callback:  # 如果有回调函数，就执行回调函数
-                await callback(photo_id, filtered_comments)
+                await callback(photo_id, comments)
 
-            result.extend(filtered_comments)
+            result.extend(comments)
             await asyncio.sleep(crawl_interval)
             if not is_fetch_sub_comments:
                 continue

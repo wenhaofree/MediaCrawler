@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
 # @Author  : relakkes@gmail.com
 # @Time    : 2023/12/2 18:44
-# @Desc    : bilibli登录类实现
+# @Desc    : bilibli登录实现类
 
 import asyncio
 import functools
 import sys
 from typing import Optional
 
-import redis
 from playwright.async_api import BrowserContext, Page
 from tenacity import (RetryError, retry, retry_if_result, stop_after_attempt,
                       wait_fixed)
 
-import config
 from base.base_crawler import AbstractLogin
 from tools import utils
 
@@ -33,8 +31,8 @@ class BilibiliLogin(AbstractLogin):
         self.cookie_str = cookie_str
 
     async def begin(self):
-        """Start login xiaohongshu"""
-        utils.logger.info("Begin login Bilibili ...")
+        """Start login bilibili"""
+        utils.logger.info("[BilibiliLogin.begin] Begin login Bilibili ...")
         if self.login_type == "qrcode":
             await self.login_by_qrcode()
         elif self.login_type == "phone":
@@ -42,7 +40,8 @@ class BilibiliLogin(AbstractLogin):
         elif self.login_type == "cookie":
             await self.login_by_cookies()
         else:
-            raise ValueError("Invalid Login Type Currently only supported qrcode or phone or cookie ...")
+            raise ValueError(
+                "[BilibiliLogin.begin] Invalid Login Type Currently only supported qrcode or phone or cookie ...")
 
     @retry(stop=stop_after_attempt(20), wait=wait_fixed(1), retry=retry_if_result(lambda value: value is False))
     async def check_login_state(self) -> bool:
@@ -59,7 +58,7 @@ class BilibiliLogin(AbstractLogin):
 
     async def login_by_qrcode(self):
         """login bilibili website and keep webdriver login state"""
-        utils.logger.info("Begin login bilibili by qrcode ...")
+        utils.logger.info("[BilibiliLogin.login_by_qrcode] Begin login bilibili by qrcode ...")
 
         # click login button
         login_button_ele = self.context_page.locator(
@@ -74,29 +73,30 @@ class BilibiliLogin(AbstractLogin):
             selector=qrcode_img_selector
         )
         if not base64_qrcode_img:
-            utils.logger.info("login failed , have not found qrcode please check ....")
+            utils.logger.info("[BilibiliLogin.login_by_qrcode] login failed , have not found qrcode please check ....")
             sys.exit()
 
         # show login qrcode
         partial_show_qrcode = functools.partial(utils.show_qrcode, base64_qrcode_img)
         asyncio.get_running_loop().run_in_executor(executor=None, func=partial_show_qrcode)
 
-        utils.logger.info(f"Waiting for scan code login, remaining time is 20s")
+        utils.logger.info(f"[BilibiliLogin.login_by_qrcode] Waiting for scan code login, remaining time is 20s")
         try:
             await self.check_login_state()
         except RetryError:
-            utils.logger.info("Login bilibili failed by qrcode login method ...")
+            utils.logger.info("[BilibiliLogin.login_by_qrcode] Login bilibili failed by qrcode login method ...")
             sys.exit()
 
         wait_redirect_seconds = 5
-        utils.logger.info(f"Login successful then wait for {wait_redirect_seconds} seconds redirect ...")
+        utils.logger.info(
+            f"[BilibiliLogin.login_by_qrcode] Login successful then wait for {wait_redirect_seconds} seconds redirect ...")
         await asyncio.sleep(wait_redirect_seconds)
 
     async def login_by_mobile(self):
         pass
 
     async def login_by_cookies(self):
-        utils.logger.info("Begin login bilibili by cookie ...")
+        utils.logger.info("[BilibiliLogin.login_by_qrcode] Begin login bilibili by cookie ...")
         for key, value in utils.convert_str_cookie_to_dict(self.cookie_str).items():
             await self.browser_context.add_cookies([{
                 'name': key,

@@ -4,85 +4,85 @@
 
 # 仓库描述
 
-**小红书爬虫**，**抖音爬虫**， **快手爬虫**， **B站爬虫**...。  
-目前能抓取小红书、抖音、快手、B站的视频、图片、评论、点赞、转发等信息。
+**小红书爬虫**，**抖音爬虫**， **快手爬虫**， **B站爬虫**， **微博爬虫**...。  
+目前能抓取小红书、抖音、快手、B站、微博的视频、图片、评论、点赞、转发等信息。
 
 原理：利用[playwright](https://playwright.dev/)搭桥，保留登录成功后的上下文浏览器环境，通过执行JS表达式获取一些加密参数
-通过使用此方式，免去了复现核心加密JS代码，逆向难度大大降低。
-爬虫技术交流群：[949715256](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=NFz-oY7Pek3gpG5zbLJFHARlB8lKL94f&authKey=FlxIQK99Uu90wddNV5W%2FBga6T6lXU5BRqyTTc26f2P2ZK5OW%2BDhHp7MwviX%2BbrPa&noverify=0&group_code=949715256),同时欢迎大家贡献代码提交PR
+通过使用此方式，免去了复现核心加密JS代码，逆向难度大大降低  
 
+爬虫技术交流群：[949715256](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=NFz-oY7Pek3gpG5zbLJFHARlB8lKL94f&authKey=FlxIQK99Uu90wddNV5W%2FBga6T6lXU5BRqyTTc26f2P2ZK5OW%2BDhHp7MwviX%2BbrPa&noverify=0&group_code=949715256)，同时欢迎大家贡献代码提交PR
 
-## SPONSORED BY
-目前爬虫正在用的IP代理：<a href="https://www.jisuhttp.com/?pl=mAKphQ&plan=ZY&kd=Yang">极速HTTP代理</a>  新用户注册认证最高送12000IP，0元试用<br>
-<a href="https://www.jisuhttp.com/?pl=mAKphQ&plan=ZY&kd=Yang" target="_blank"><img src="https://s2.loli.net/2023/11/30/RapQtL8A2w6TGfj.png" alt="极速HTTP代理-官网图"></a>
+视频配置教程：[MediaCrawler视频入门教程](https://space.bilibili.com/434377496/channel/series)
 
+## 感谢下列Sponsors对本仓库赞助
+<a href="https://dashboard.ipcola.com/register?referral_code=vkybwyucyuidpne">全球ip代理超新星</a>
+<a href="https://dashboard.ipcola.com/register?referral_code=vkybwyucyuidpne" target="_blank"><img src="https://s2.loli.net/2024/03/18/LKJaWcIHQl92ip5.jpg" alt="IPCola,  全球ip代理超新星-官网图"></a><br>
+<br>
+<a href="https://monica.im/invitation?c=4HCSQRYS">你也可以通过注册这款免费的ChatGPT产品，帮我获取额外的GPT-4额度作为支持，也是我每天都在用的一款chrome效率插件，推荐给你</a>
+
+成为赞助者，展示你的产品在这里，联系作者：relakkes@gmail.com
 
 ## 功能列表
-| 平台  | Cookie 登录 | 二维码登录 | 手机号登录 | 关键词搜索 | 指定视频/帖子 ID 爬取 | 登录状态缓存 | 数据保存 | IP 代理池 | 滑块验证码 |
-|:---:|:---------:|:-----:|:-----:|:-----:|:-------------:|:------:|:----:|:------:|:-----:|
-| 小红书 |     ✅     |   ✅   | ✅     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✕   |
-| 抖音  |     ✅     |   ✅   | ✅     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✅   |
-| 快手  |     ✅     |   ✅   | ✕     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |    ✕   |
-| B 站 |     ✅      |   ✅    | ✕     |   ✅    |       ✅        |    ✅    |   ✅   |    ✅    |   ✕   |
-| 微博  |     ✕     |   ✕   | ✕     |   ✕   |       ✕       |   ✕    |  ✕   |   ✕    |   ✕   |
+| 平台  | Cookie 登录 | 二维码登录 | 指定创作者主页 | 关键词搜索 | 指定视频/帖子 ID 爬取 | 登录状态缓存 | 数据保存 | IP 代理池 | 滑块验证码 |
+|:---:|:---------:|:-----:|:-------:|:-----:|:-------------:|:------:|:----:|:------:|:-----:|
+| 小红书 |     ✅     |   ✅   |    ✅    |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✕   |
+| 抖音  |     ✅     |   ✅   |    ✕     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✅   |
+| 快手  |     ✅     |   ✅   |    ✕    |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |    ✕   |
+| B 站 |     ✅     |   ✅   |    ✕    |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✕   |
+| 微博  |     ✅      |   ✅    |    ✕    |   ✅    |       ✅        |    ✅    |   ✅   |    ✅    |   ✕   |
 
 
 ## 使用方法
 
-1. 创建 python 虚拟环境
-   ```shell
-   python3 -m venv venv
+### 创建并激活 python 虚拟环境
+   ```shell   
+   # 进入项目根目录
+   cd MediaCrawler
+   
+   # 创建虚拟环境
+   python -m venv venv
+   
+   # macos & linux 激活虚拟环境
+   source venv/bin/activate
+
+   # windows 激活虚拟环境
+   venv\Scripts\activate
+
    ```
 
-2. 安装依赖库
+### 安装依赖库
 
    ```shell
-   pip install -r requirements.txt
+   pip3 install -r requirements.txt
    ```
 
-3. 安装playwright浏览器驱动
+### 安装 playwright浏览器驱动
 
    ```shell
    playwright install
    ```
 
-4. 是否保存数据到DB中
-
-   如果选择开启，则需要配置数据库连接信息，`config/db_config.py` 中的 `IS_SAVED_DATABASED`和`RELATION_DB_URL` 变量。然后执行以下命令初始化数据库信息，生成相关的数据库表结构：
+### 运行爬虫程序
 
    ```shell
-   python db.py
-   ```
-
-5. 运行爬虫程序
-
-   ```shell
+   # 默认没有开启评论爬取模式，有需要请到配置文件中指定
    # 从配置文件中读取关键词搜索相关的帖子并爬去帖子信息与评论
    python main.py --platform xhs --lt qrcode --type search
    
    # 从配置文件中读取指定的帖子ID列表获取指定帖子的信息与评论信息
    python main.py --platform xhs --lt qrcode --type detail
-   
+  
+   # 打开对应APP扫二维码登录
+     
    # 其他平台爬虫使用示例, 执行下面的命令查看
-    python3 main.py --help
-    
+   python main.py --help    
    ```
 
-6. 打开对应APP扫二维码登录
 
-7. 等待爬虫程序执行完毕，数据会保存到 `data/xhs` 目录下
-
-## 如何使用 IP 代理
-➡️➡️➡️ [IP代理使用方法](docs/代理使用.md)
-
-## 运行报错常见问题Q&A
-➡️➡️➡️ [常见问题](docs/常见问题.md)
-
-## 项目代码结构
-➡️➡️➡️ [项目代码结构说明](docs/项目代码结构.md)
-
-## 手机号登录说明
-➡️➡️➡️ [手机号登录说明](docs/手机号登录说明.md)
+### 数据保存
+- 支持保存到关系型数据库（Mysql、PgSQL等）
+- 支持保存到csv中（data/目录下）
+- 支持保存到json中（data/目录下）
 
 ## 打赏
 
@@ -98,10 +98,45 @@
 
 PS：如果打赏时请备注捐赠者，如有遗漏请联系我添加（有时候消息多可能会漏掉，十分抱歉）
 
-| 捐赠者    | 捐赠金额   | 捐赠日期       |
-|--------|--------|------------|
-| 坠落     | 50 元   | 2023-11-08 |
-| 一呆     | 20 元   | 2023-12-01 |
+| 捐赠者         | 捐赠金额  | 捐赠日期       |
+|-------------|-------|------------|
+| Nate Yang   | 20 元 | 2024-03-19 |
+| Tsen Ming   | 100 元 | 2024-03-18 |
+| *皓          | 50 元  | 2024-03-18 |
+| *刚          | 50 元  | 2024-03-18 |
+| *乐          | 20 元  | 2024-03-17 |
+| *木          | 20 元  | 2024-03-17 |
+| *诚          | 20 元  | 2024-03-17 |
+| Strem Gamer | 20 元  | 2024-03-16 |
+| *鑫          | 20 元  | 2024-03-14 |
+| Yuzu        | 20 元  | 2024-03-07 |
+| **宁         | 100 元 | 2024-03-03 |
+| **媛         | 20 元  | 2024-03-03 |
+| Scarlett    | 20 元  | 2024-02-16 |
+| Asun        | 20 元  | 2024-01-30 |
+| 何*          | 100 元 | 2024-01-21 |
+| allen       | 20 元  | 2024-01-10 |
+| llllll      | 20 元  | 2024-01-07 |
+| 邝*元         | 20 元  | 2023-12-29 |
+| 50chen      | 50 元  | 2023-12-22 |
+| xiongot     | 20 元  | 2023-12-17 |
+| atom.hu     | 20 元  | 2023-12-16 |
+| 一呆          | 20 元  | 2023-12-01 |
+| 坠落          | 50 元  | 2023-11-08 |
+
+## 运行报错常见问题Q&A
+> 遇到问题先自行搜索解决下，现在AI很火，用ChatGPT大多情况下能解决你的问题  <a href="https://monica.im/invitation?c=4HCSQRYS">免费的ChatGPT推荐</a>
+
+➡️➡️➡️ [常见问题](docs/常见问题.md)
+
+
+## 项目代码结构
+➡️➡️➡️ [项目代码结构说明](docs/项目代码结构.md)
+
+## 手机号登录说明
+➡️➡️➡️ [手机号登录说明](docs/手机号登录说明.md)
+
+
 
 ## star 趋势图
 - 如果该项目对你有帮助，star一下 ❤️❤️❤️

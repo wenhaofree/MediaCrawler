@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from typing import Dict, Optional
 
-from proxy.proxy_account_pool import AccountPool
+from playwright.async_api import BrowserContext, BrowserType
 
 
 class AbstractCrawler(ABC):
@@ -14,6 +15,11 @@ class AbstractCrawler(ABC):
 
     @abstractmethod
     async def search(self):
+        pass
+
+    @abstractmethod
+    async def launch_browser(self, chromium: BrowserType, playwright_proxy: Optional[Dict], user_agent: Optional[str],
+                             headless: bool = True) -> BrowserContext:
         pass
 
 
@@ -32,4 +38,20 @@ class AbstractLogin(ABC):
 
     @abstractmethod
     async def login_by_cookies(self):
+        pass
+
+
+class AbstractStore(ABC):
+    @abstractmethod
+    async def store_content(self, content_item: Dict):
+        pass
+
+    @abstractmethod
+    async def store_comment(self, comment_item: Dict):
+        pass
+
+    # TODO support all platform
+    # only xhs is supported, so @abstractmethod is commented
+    # @abstractmethod
+    async def store_creator(self, creator: Dict):
         pass
