@@ -24,6 +24,9 @@ def calculatet_number_of_files(file_store_path: str) -> int:
     """
     if not os.path.exists(file_store_path):
         return 1
+    # 空文件夹处理
+    return 1 if any(entry.is_file() for entry in os.scandir(file_store_path)) else 0
+
     return max([int(file_name.split("_")[0])for file_name in os.listdir(file_store_path)])+1
 
 

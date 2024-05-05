@@ -1,10 +1,13 @@
 # 基础配置
 PLATFORM = "xhs"
-KEYWORDS = "python,golang"
-LOGIN_TYPE = "qrcode"  # qrcode or phone or cookie
-COOKIES = ""
-SORT_TYPE = "popularity_descending"  # 具体值参见media_platform.xxx.field下的枚举值，展示只支持小红书
-CRAWLER_TYPE = "search"  # 爬取类型，search(关键词搜索) | detail(帖子详情)| creator(创作者主页数据)
+KEYWORDS = "python"
+LOGIN_TYPE = "cookie"  # qrcode or phone or cookie
+COOKIES = "unread={%22ub%22:%22663378e0000000001e0301f9%22%2C%22ue%22:%22661cda0e000000001a016da8%22%2C%22uc%22:22}; web_session=040069b4a6fd1d43a7061fb303344b03cb103e; gid=yYi4KSK80JC0yYi4KSK8yxv022j2jFCCkIfCx4UACl04xiq873lI9U888J24WWK8Kj4i4K2D; sec_poison_id=0452d232-f2da-4c1c-81f1-fc95a3f7b295; websectiga=8886be45f388a1ee7bf611a69f3e174cae48f1ea02c0f8ec3256031b8be9c7ee; acw_tc=6e877f5428a07d155c18fe3b656bc6627f4f013076b8341f8e3a9592cf520074; a1=18f46c60155959rxxgndxqxoa4huiontxhhfpya4p30000254776; webBuild=4.14.2; webId=598f9d48f8175990c432da097a5e8c46; xsecappid=xhs-pc-web; abRequestId=8ee366a5-328b-5c9a-bcda-05fe5c638a46"
+SORT_TYPE = "general"  # 具体值参见media_platform.xxx.field下的枚举值，展示只支持小红书  基础: general  流行: popularity_descending  最新: time_descending
+CRAWLER_TYPE = "detail"  # 爬取类型，search(关键词搜索) | detail(帖子详情)| creator(创作者主页数据)
+
+# 自定义添加浏览器内核
+EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # 是否开启 IP 代理
 ENABLE_IP_PROXY = False
@@ -46,11 +49,11 @@ ENABLE_GET_COMMENTS = False
 # 老版本项目使用了 db, 则需参考 schema/tables.sql line 287 增加表字段
 ENABLE_GET_SUB_COMMENTS = False
 
-# 指定小红书需要爬虫的笔记ID列表
+# 指定小红书需要爬虫的笔记ID列表(对应:detail)
 XHS_SPECIFIED_ID_LIST = [
     "6422c2750000000027000d88",
-    "64ca1b73000000000b028dd2",
-    "630d5b85000000001203ab41",
+    # "64ca1b73000000000b028dd2",
+    # "630d5b85000000001203ab41",
     # ........................
 ]
 
@@ -81,8 +84,8 @@ WEIBO_SPECIFIED_ID_LIST = [
     # ........................
 ]
 
-# 指定小红书创作者ID列表
+# 指定小红书创作者ID列表(对应:creator)
 XHS_CREATOR_ID_LIST = [
-    "63e36c9a000000002703502b",
+    "600bbcb100000000010057cf"
     # ........................
 ]

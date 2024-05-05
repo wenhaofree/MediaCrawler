@@ -11,7 +11,7 @@ from media_platform.kuaishou import KuaishouCrawler
 from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 
-
+from models.notion_xhs import main as xhs_main
 class CrawlerFactory:
     CRAWLERS = {
         "xhs": XiaoHongShuCrawler,
@@ -61,6 +61,9 @@ async def main():
     if config.SAVE_DATA_OPTION == "db":
         await db.close()
 
+    # TODO: 存储Notion
+    if args.platform == "xhs":
+        xhs_main()
 
 if __name__ == '__main__':
     try:
