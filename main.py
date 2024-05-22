@@ -63,6 +63,10 @@ async def main():
 
     # TODO: 存储Notion
     if args.platform == "xhs":
+
+
+
+        
         xhs_main()
 
 if __name__ == '__main__':
