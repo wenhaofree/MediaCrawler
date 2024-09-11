@@ -1,3 +1,12 @@
+# 分支说明:
+1. main: 
+- 用于更新最新代码同步
+2. release:
+- 用于检索和同步Notion数据
+3. fwh-dev-v2.0:
+- 用于检索和同步Notion数据
+
+
 ## 个人注意事项:
 1. 搜索信息关键词,都在config目录的base_config里.  新增代码配置指定浏览器:executable_path=config.EXECUTABLE_PATH 
 
@@ -19,6 +28,13 @@
       - 笔记评论信息，再Excel文件夹中 data/xhs.  没有做Notion处理
       - 同步过Notion的数据，会记录在Notion-xhs.json文件中，避免重复采集。
       - 目前配置爬取数据200条
+4. base_config配置文件说明:
+      - 先选择平台: xhs
+      - 选择: 登录方式,需要配置Cookie信息
+      - 选择:爬取类型: 
+        - 搜索模式: 需要配置关键词
+        - 帖子详情: 需要配置帖子ID列表
+        - 作者模式: 需要配置作者的ID列表
    
 
 
