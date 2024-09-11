@@ -13,7 +13,8 @@ from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
 
-
+from models.notion_xhs import main as xhs_notion_main
+from models.notion_xhs_clean import main as xhs_notion_clean_main
 class CrawlerFactory:
     CRAWLERS = {
         "xhs": XiaoHongShuCrawler,
@@ -47,7 +48,10 @@ async def main():
     if config.SAVE_DATA_OPTION == "db":
         await db.close()
 
-    
+    # TODO: 存储Notion
+    if config.PLATFORM == "xhs":
+        xhs_notion_main(config.KEYWORDS)
+        xhs_notion_clean_main()
 
 if __name__ == '__main__':
     try:

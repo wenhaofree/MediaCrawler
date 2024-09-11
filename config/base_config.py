@@ -1,16 +1,19 @@
 # 基础配置
 PLATFORM = "xhs"
-KEYWORDS = "编程副业,编程兼职"
-LOGIN_TYPE = "qrcode"  # qrcode or phone or cookie
-COOKIES = ""
+KEYWORDS = "高考英语"
+LOGIN_TYPE = "cookie"  # qrcode or phone or cookie
+COOKIES = "abRequestId=170d3834-b025-5f77-8ce2-dbc039bdc4e6; a1=19127e9a2eahvko8jlye9okhxrt9op4ekhslyxyw030000157011; webId=f6780f1cc70aa2eeb20610ac53419cb1; gid=yjyJWdj0WKTiyjyJWdj0JxCvd0xhTlYV1vdjME8lTxCF91q8jlU4dv888y2W8yy8fjyDJ0if; webBuild=4.33.2; xsecappid=xhs-pc-web; acw_tc=61e2709e3b927bcc77b646191c2879b3b2de4485fc0c15bb44b667c6deafab50; websectiga=10f9a40ba454a07755a08f27ef8194c53637eba4551cf9751c009d9afb564467; sec_poison_id=d2beca1f-7a00-409c-8dd8-0aa09d7baea9; web_session=040069799c758c3a498e5f1bd4344bbb8a0d1c; unread={%22ub%22:%2266c58c6a000000001d014fe3%22%2C%22ue%22:%2266deea51000000000c01b012%22%2C%22uc%22:29}"
 # 具体值参见media_platform.xxx.field下的枚举值，暂时只支持小红书
-SORT_TYPE = "popularity_descending"
+SORT_TYPE = "general"  # 基础: general  流行: popularity_descending  最新: time_descending
 # 具体值参见media_platform.xxx.field下的枚举值，暂时只支持抖音
 PUBLISH_TIME_TYPE = 0
 CRAWLER_TYPE = "search"  # 爬取类型，search(关键词搜索) | detail(帖子详情)| creator(创作者主页数据)
 
 # 是否开启 IP 代理
 ENABLE_IP_PROXY = False
+
+# 自定义添加浏览器内核
+EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
 # 代理IP池数量
 IP_PROXY_POOL_COUNT = 2
@@ -22,7 +25,7 @@ IP_PROXY_PROVIDER_NAME = "kuaidaili"
 # 设置False会打开一个浏览器
 # 小红书如果一直扫码登录不通过，打开浏览器手动过一下滑动验证码
 # 抖音如果一直提示失败，打开浏览器看下是否扫码登录之后出现了手机号验证，如果出现了手动过一下再试。
-HEADLESS = False
+HEADLESS = True
 
 # 是否保存登录状态
 SAVE_LOGIN_STATE = True
@@ -37,7 +40,7 @@ USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name
 START_PAGE = 1
 
 # 爬取视频/帖子的数量控制
-CRAWLER_MAX_NOTES_COUNT = 100
+CRAWLER_MAX_NOTES_COUNT = 500
 
 # 并发爬虫数量控制
 MAX_CONCURRENCY_NUM = 1

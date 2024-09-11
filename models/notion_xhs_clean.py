@@ -59,11 +59,12 @@ class notion_client:
                                 print(f'删除异常: {e}')
                         else:
                             property_name_set.add(text_value)
-
-
-if __name__ == '__main__':
+def main():
     """
     1. 清理冗余重复数据 头条数据
     """
     client = notion_client()
     client.get_all_pages(global_database_id)
+
+if __name__ == '__main__':
+    main()

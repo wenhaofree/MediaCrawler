@@ -68,7 +68,7 @@ class NotionClient:
                     'rich_text': [
                         {
                             'text': {
-                                'content': page['image_list']
+                                'content': page['image_list'][:1900]
                             }
                         }
                     ]
@@ -181,7 +181,7 @@ class NotionClient:
         return property_name_set
 
 
-def notion_data_save(client, pages):
+def notion_data_save(client, pages,global_config_keyword):
     # 插入notion的数据保存文件中
     file_path = os.path.join(os.path.dirname(__file__), "notion-xhs.json")
     with open(file_path, 'a') as f:
@@ -192,7 +192,7 @@ def notion_data_save(client, pages):
                 page['last_modify_ts'] = time_fromat(page['last_modify_ts'])
                 page['last_update_time'] = time_fromat(page['last_update_time'])
                 # page['keyword'] = config.KEYWORDS
-                page['keyword'] = global_config_KEYWORDS
+                page['keyword'] = global_config_keyword
                 # 标签处理
                 tag_list_array = page['tag_list'].split(',')
                 data = {"multi_select": []}
@@ -239,7 +239,7 @@ def get_json_files():
     current_file_path = os.path.abspath(__file__)
     parent_dir_path = os.path.dirname(current_file_path)
     grandparent_dir_path = os.path.dirname(parent_dir_path)
-    data_dir_path = os.path.join(grandparent_dir_path, "data/xhs")
+    data_dir_path = os.path.join(grandparent_dir_path, "data/xhs/json")
     json_files = [os.path.join(data_dir_path, f) for f in os.listdir(data_dir_path) if f.endswith('.json')]
     # 打印找到的所有 JSON 文件路径
     file_paths = []
@@ -254,41 +254,50 @@ def parse_json_files(exist_ids, filename):
         return
     pages = []
     with open(filename) as f:
-        for line in f:
-            rows = json.loads(line)
-            for row in rows:
-                # 唯一ID
-                note_id = row['note_id']
-                # 判断数据是否存在
-                if note_id in exist_ids:
-                    continue
-                page = {
-                    'note_id': note_id,
-                    'type': row['type'],
-                    'title': row['title'],
-                    'desc': row['desc'],
-                    'video_url': row['video_url'],
-                    'time': row['time'],
-                    'last_update_time': row['last_update_time'],
-                    'user_id': row['user_id'],
-                    'nickname': row['nickname'],
-                    'avatar': row['avatar'],
-                    'liked_count': row['liked_count'],
-                    'collected_count': row['collected_count'],
-                    'comment_count': row['comment_count'],
-                    'share_count': row['share_count'],
-                    'ip_location': row['ip_location'],
-                    'image_list': row['image_list'],
-                    'tag_list': row['tag_list'],
-                    'tag_list': row['tag_list'],
-                    'last_modify_ts': row['last_modify_ts'],
-                    'note_url': row['note_url'],
-                }
-                pages.append(page)
+        rows = json.load(f)
+        # for line in f:
+        #     rows = json.loads(line)
+        for row in rows:
+            # 唯一ID
+            note_id = row['note_id']
+            # 判断数据是否存在
+            if note_id in exist_ids:
+                continue
+            page = {
+                'note_id': note_id,
+                'type': row['type'],
+                'title': row['title'],
+                'desc': row['desc'],
+                'video_url': row['video_url'],
+                'time': row['time'],
+                'last_update_time': row['last_update_time'],
+                'user_id': row['user_id'],
+                'nickname': row['nickname'],
+                'avatar': row['avatar'],
+                'liked_count': convert_to_integer(row['liked_count']),
+                'collected_count': convert_to_integer(row['collected_count']),
+                'comment_count': convert_to_integer(row['comment_count']),
+                'share_count': convert_to_integer(row['share_count']),
+                'ip_location': row['ip_location'],
+                'image_list': row['image_list'],
+                'tag_list': row['tag_list'],
+                'tag_list': row['tag_list'],
+                'last_modify_ts': row['last_modify_ts'],
+                'note_url': row['note_url'],
+            }
+            pages.append(page)
     return pages
 
-global_config_KEYWORDS='AI'
-def main():
+def convert_to_integer(s):
+    """数字转化"""
+    if '万' in s:
+        # 去掉 '万' 并转换为浮点数，然后乘以 10000
+        number = float(s.replace('万', '')) * 10000
+    else:
+        number = float(s)
+    return int(number)
+
+def main(keyword:None):
     '''
     1. 加载Json数据
     2. 解析Json数据
@@ -302,7 +311,7 @@ def main():
         if "contents" in file_path:
             # 正文
             pages = parse_json_files(exist_ids, file_path)
-            notion_data_save(client, pages)
+            notion_data_save(client, pages, keyword)
         elif "comments" in file_path:
             print('评论')
         # 删除文件
@@ -311,4 +320,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main('英语资料')

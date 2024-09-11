@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from urllib.parse import urlencode
 
 import httpx
+import time
 from playwright.async_api import BrowserContext, Page
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -125,6 +126,7 @@ class XiaoHongShuClient(AbstractApiClient):
         Returns:
 
         """
+        time.sleep(5) # 爬取频繁限制一下
         headers = await self._pre_headers(uri, data)
         json_str = json.dumps(data, separators=(',', ':'), ensure_ascii=False)
         return await self.request(method="POST", url=f"{self._host}{uri}",
