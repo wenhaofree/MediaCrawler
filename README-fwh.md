@@ -1,3 +1,12 @@
+# 分支说明:
+1. main: 
+- 用于更新最新代码同步
+2. release:
+- 用于检索和同步Notion数据
+3. fwh-dev-v2.0:
+- 用于检索和同步Notion数据
+
+
 ## 个人注意事项:
 1. 搜索信息关键词,都在config目录的base_config里.  新增代码配置指定浏览器:executable_path=config.EXECUTABLE_PATH 
 

@@ -3,7 +3,7 @@ import datetime
 import json
 import os
 import re
-import config
+# import config
 
 
 def time_fromat(timestamp):
@@ -191,7 +191,8 @@ def notion_data_save(client, pages):
                 page['time'] = time_fromat(page['time'])
                 page['last_modify_ts'] = time_fromat(page['last_modify_ts'])
                 page['last_update_time'] = time_fromat(page['last_update_time'])
-                page['keyword'] = config.KEYWORDS
+                # page['keyword'] = config.KEYWORDS
+                page['keyword'] = global_config_KEYWORDS
                 # 标签处理
                 tag_list_array = page['tag_list'].split(',')
                 data = {"multi_select": []}
@@ -286,7 +287,7 @@ def parse_json_files(exist_ids, filename):
                 pages.append(page)
     return pages
 
-
+global_config_KEYWORDS='AI'
 def main():
     '''
     1. 加载Json数据
@@ -294,7 +295,6 @@ def main():
     3. 数据存储Notion-xhs中
     4. 存储完毕,删除Json文件
     '''
-
     client = NotionClient()
     json_files = get_json_files()
     exist_ids = get_message_ids()
