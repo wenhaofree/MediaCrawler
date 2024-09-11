@@ -7,32 +7,30 @@
 > 点击查看更为详细的免责声明。[点击跳转](#disclaimer)
 # 仓库描述
 
-**小红书爬虫**，**抖音爬虫**， **快手爬虫**， **B站爬虫**， **微博爬虫**...。  
-目前能抓取小红书、抖音、快手、B站、微博的视频、图片、评论、点赞、转发等信息。
+**小红书爬虫**，**抖音爬虫**， **快手爬虫**， **B站爬虫**， **微博爬虫**，**百度贴吧爬虫**，**知乎爬虫**...。  
+目前能抓取小红书、抖音、快手、B站、微博、贴吧、知乎等平台的公开信息。
 
 原理：利用[playwright](https://playwright.dev/)搭桥，保留登录成功后的上下文浏览器环境，通过执行JS表达式获取一些加密参数
 通过使用此方式，免去了复现核心加密JS代码，逆向难度大大降低
 
-## 视频教程
-> 如果你想很快入门这个项目，或者想了具体实现原理，我推荐你看看这个课程，从设计出发一步步带你如何使用，门槛大大降低，同时也是对我开源的支持，如果你能支持我的课程，我将会非常开心～<br>
-> 课程售价非常非常的便宜，几杯咖啡的事儿.<br>
-> 课程介绍飞书文档链接：https://relakkes.feishu.cn/wiki/JUgBwdhIeiSbAwkFCLkciHdAnhh
+[MediaCrawlerPro](https://github.com/MediaCrawlerPro) 版本已经迭代出来了，相较于开源版本的优势：
+- 多账号+IP代理支持（重点！）
+- 去除Playwright依赖，使用更加简单
+- 支持linux部署（Docker docker-compose）
+- 代码重构优化，更加易读易维护（解耦JS签名逻辑）
+- 完美的架构设计，更加易扩展，源码学习的价值更大
 
-
-## 感谢下列Sponsors对本仓库赞助
-<a href="https://sider.ai/ad-land-redirect?source=github&p1=mi&p2=kk">通过注册这个款免费的GPT助手，帮我获取GPT4额度作为支持。也是我每天在用的一款chrome AI助手插件</a>
-<a href="https://sider.ai/ad-land-redirect?source=github&p1=mi&p2=kk" target="_blank"><img src="https://s2.loli.net/2024/04/01/jK8drZ2bxTg67q9.png" ></a>
-
-成为赞助者，展示你的产品在这里，联系作者：relakkes@gmail.com
 
 ## 功能列表
-| 平台  | Cookie 登录 | 二维码登录 | 手机号登录 | 关键词搜索 | 指定视频/帖子 ID 爬取 | 登录状态缓存 | 数据保存 | IP 代理池 | 滑块验证码 |
-|:---:|:---------:|:-----:|:-----:|:-----:|:-------------:|:------:|:----:|:------:|:-----:|
-| 小红书 |     ✅     |   ✅   | ✅     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✕   |
-| 抖音  |     ✅     |   ✅   | ✅     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✅   |
-| 快手  |     ✅     |   ✅   | ✕     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |    ✕   |
-| B 站 |     ✅     |   ✅   | ✕     |   ✅   |       ✅       |   ✅    |  ✅   |   ✅    |   ✕   |
-| 微博  |     ✅      |   ✅    | ✕     |   ✅    |       ✅        |    ✅    |   ✅   |    ✅    |   ✕   |
+| 平台  | 关键词搜索 | 指定帖子ID爬取 | 二级评论 | 指定创作者主页 | 登录态缓存 | IP代理池 | 生成评论词云图 |
+|-----|-------|---------|-----|--------|-------|-------|-------|
+| 小红书 | ✅     | ✅       | ✅   | ✅      | ✅     | ✅     | ✅    |
+| 抖音  | ✅     | ✅       | ✅    | ✅       | ✅     | ✅     | ✅    |
+| 快手  | ✅     | ✅       | ✅   | ✅      | ✅     | ✅     | ✅    |
+| B 站 | ✅     | ✅       | ✅   | ✅      | ✅     | ✅     | ✅    |
+| 微博  | ✅     | ✅       | ✅   | ✅      | ✅     | ✅     | ✅    |
+| 贴吧  | ✅     | ✅       | ✅   | ✅      | ✅     | ✅     | ✅    |
+| 知乎  | ✅     |   ❌      | ✅   | ❌      | ✅     | ✅     | ✅    |
 
 
 ## 使用方法
@@ -43,7 +41,7 @@
    cd MediaCrawler
    
    # 创建虚拟环境
-   # 注意python 版本需要3.7 - 3.9 
+   # 我的python版本是：3.9.6，requirements.txt中的库是基于这个版本的，如果是其他python版本，可能requirements.txt中的库不兼容，自行解决一下。
    python -m venv venv
    
    # macos & linux 激活虚拟环境
@@ -57,7 +55,7 @@
 ### 安装依赖库
 
    ```shell
-   pip3 install -r requirements.txt
+   pip install -r requirements.txt
    ```
 
 ### 安装 playwright浏览器驱动
@@ -69,6 +67,9 @@
 ### 运行爬虫程序
 
    ```shell
+   ### 项目默认是没有开启评论爬取模式，如需评论请在config/base_config.py中的 ENABLE_GET_COMMENTS 变量修改
+   ### 一些其他支持项，也可以在config/base_config.py查看功能，写的有中文注释
+   
    # 从配置文件中读取关键词搜索相关的帖子并爬取帖子信息与评论
    python main.py --platform xhs --lt qrcode --type search
    
@@ -81,30 +82,65 @@
    python main.py --help    
    ```
 
-
 ### 数据保存
-- 支持保存到关系型数据库（Mysql、PgSQL等）
+- 支持关系型数据库Mysql中保存（需要提前创建数据库）
     - 执行 `python db.py` 初始化数据库数据库表结构（只在首次执行）
 - 支持保存到csv中（data/目录下）
 - 支持保存到json中（data/目录下）
 
+
+## 开发者服务
+- MediaCrawler视频课程：
+  > 视频课程介绍飞书文档链接：https://relakkes.feishu.cn/wiki/JUgBwdhIeiSbAwkFCLkciHdAnhh
+  > 如果你想很快入门这个项目，或者想了具体实现原理，我推荐你看看这个视频课程，从设计出发一步步带你如何使用，门槛大大降低
+  > 
+  > 同时也是对我开源的支持，如果你能支持我的课程，我将会非常开心～<br>
+  
+
+- 知识星球：MediaCrawler相关问题最佳实践、爬虫逆向分享、爬虫项目实战、多年编程经验分享、爬虫编程技术问题提问。
+  <p>
+  <img alt="xingqiu" src="static/images/星球qrcode.JPG" style="width: auto;height: 400px" >
+  </p>
+  
+  星球精选文章(部分)：
+  - [逆向案例 - 某16x8平台商品列表接口逆向参数分析](https://articles.zsxq.com/id_x1qmtg8pzld9.html)
+  - [逆向案例 - Product Hunt月度最佳产品榜单接口加密参数分析](https://articles.zsxq.com/id_au4eich3x2sg.html)
+  - [逆向案例 - 某zhi乎x-zse-96参数分析过程](https://articles.zsxq.com/id_dui2vil0ag1l.html)
+  - [逆向案例 - 某x识星球X-Signature加密参数分析过程](https://articles.zsxq.com/id_pp4madwcwcg8.html)
+  - [【独创】使用Playwright获取某音a_bogus参数流程（包含加密参数分析）](https://articles.zsxq.com/id_u89al50jk9x0.html)
+  - [【独创】使用Playwright低成本获取某书X-s参数流程分析（当年的回忆录）](https://articles.zsxq.com/id_u4lcrvqakuc7.html)
+  - [ MediaCrawler-基于抽象类设计重构项目缓存](https://articles.zsxq.com/id_4ju73oxewt9j.html)
+  - [ 手把手带你撸一个自己的IP代理池](https://articles.zsxq.com/id_38fza371ladm.html) 
+
+  
+## 感谢下列Sponsors对本仓库赞助
+> 帮我注册下面的AI插件，保留一天，我可以得到3rmb的赞助，感谢您的支持
+- <a href="https://sider.ai/ad-land-redirect?source=github&p1=mi&p2=kk">【Sider】全网最火的ChatGPT插件，我也免费薅羊毛用了快一年了，体验拉满。</a>
+
+成为赞助者，可以将您产品展示在这里，每天获得大量曝光，联系作者微信：yzglan
+
 ## MediaCrawler爬虫项目交流群：
-> 7天有效期，自动更新, 如果人满了可以加作者wx拉进群: yzglan，备注来自github.
+<div id="join_wechat_group"> 
+
+> 备注github，会有拉群小助手自动拉你进群。  如果图片展示不出来或过期，可以直接添加我的微信号：yzglan，并备注github，会有拉群小助手自动拉你进
 
 <div style="max-width: 200px">  
-<p><img alt="7群二维码" src="static/images/7群二维码.JPG" style="width: 200px;height: 100%" ></p>
+<p><img alt="直接添加我的微信号：yzglan" src="static/images/relakkes_weichat.JPG" style="width: 200px;height: 100%" ></p>
+</div>
 </div>
 
 
 ## 打赏
-免费开源不易，如果项目帮到你了，可以给我打赏哦，您的支持就是我最大的动力！
-<div style="display: flex;justify-content: space-between;width: 100%">
-    <p><img alt="打赏-微信" src="static/images/wechat_pay.jpeg" style="width: 200px;height: 100%" ></p>
-    <p><img alt="打赏-支付宝" src="static/images/zfb_pay.png"   style="width: 200px;height: 100%" ></p>
-</div>
 
-## 爬虫入门课程
-我新开的爬虫教程Github仓库 [CrawlerTutorial](https://github.com/NanmiCoder/CrawlerTutorial) ，感兴趣的朋友可以关注一下，持续更新，主打一个免费.
+如果觉得项目不错的话可以打赏哦。您的支持就是我最大的动力！
+
+打赏时您可以备注名称，我会将您添加至打赏列表中。
+<p>
+  <img alt="打赏-微信" src="static/images/wechat_pay.jpeg" style="width: 200px;margin-right: 140px;" />
+  <img alt="打赏-支付宝" src="static/images/zfb_pay.png" style="width: 200px" />
+</p>
+
+查看打赏列表 [点击跳转](#donate)
 
 
 ## 运行报错常见问题Q&A
@@ -112,13 +148,23 @@
 
 ➡️➡️➡️ [常见问题](docs/常见问题.md)
 
+dy和xhs使用Playwright登录现在会出现滑块验证 + 短信验证，手动过一下
 
 ## 项目代码结构
 ➡️➡️➡️ [项目代码结构说明](docs/项目代码结构.md)
 
+## 代理IP使用说明
+➡️➡️➡️ [代理IP使用说明](docs/代理使用.md)
+
+## 词云图相关操作说明
+➡️➡️➡️ [词云图相关说明](docs/关于词云图相关操作.md)
+
 ## 手机号登录说明
 ➡️➡️➡️ [手机号登录说明](docs/手机号登录说明.md)
 
+
+## 爬虫入门课程
+我新开的爬虫教程Github仓库 [CrawlerTutorial](https://github.com/NanmiCoder/CrawlerTutorial) ，感兴趣的朋友可以关注一下，持续更新，主打一个免费.
 
 
 ## star 趋势图
@@ -128,14 +174,47 @@
 
 
 
-
 ## 参考
 
 - xhs客户端 [ReaJason的xhs仓库](https://github.com/ReaJason/xhs)
 - 短信转发 [参考仓库](https://github.com/pppscn/SmsForwarder)
 - 内网穿透工具 [ngrok](https://ngrok.com/docs/)
 
+## 捐赠信息
+<div id="donate">
 
+PS：如果打赏时请备注捐赠者，如有遗漏请联系我添加（有时候消息多可能会漏掉，十分抱歉）
+
+| 捐赠者         | 捐赠金额  | 捐赠日期       |
+|-------------|-------|------------|
+| Urtb*       | 100 元 | 2024-09-07 |
+| Tornado     | 66 元  | 2024-09-04 |
+| srhedbj     | 50 元  | 2024-08-20 |
+| *嘉          | 20 元  | 2024-08-15 |
+| *良          | 50 元  | 2024-08-13 |
+| *皓          | 50 元  | 2024-03-18 |
+| *刚          | 50 元  | 2024-03-18 |
+| *乐          | 20 元  | 2024-03-17 |
+| *木          | 20 元  | 2024-03-17 |
+| *诚          | 20 元  | 2024-03-17 |
+| Strem Gamer | 20 元  | 2024-03-16 |
+| *鑫          | 20 元  | 2024-03-14 |
+| Yuzu        | 20 元  | 2024-03-07 |
+| **宁         | 100 元 | 2024-03-03 |
+| **媛         | 20 元  | 2024-03-03 |
+| Scarlett    | 20 元  | 2024-02-16 |
+| Asun        | 20 元  | 2024-01-30 |
+| 何*          | 100 元 | 2024-01-21 |
+| allen       | 20 元  | 2024-01-10 |
+| llllll      | 20 元  | 2024-01-07 |
+| 邝*元         | 20 元  | 2023-12-29 |
+| 50chen      | 50 元  | 2023-12-22 |
+| xiongot     | 20 元  | 2023-12-17 |
+| atom.hu     | 20 元  | 2023-12-16 |
+| 一呆          | 20 元  | 2023-12-01 |
+| 坠落          | 50 元  | 2023-11-08 |
+
+</div>
 
 ## 免责声明
 <div id="disclaimer"> 
@@ -160,7 +239,8 @@
 </div>
 
 
-
-
-
+### 感谢JetBrains提供的免费开源许可证支持
+<a href="https://www.jetbrains.com/?from=MediaCrawler">
+    <img src="https://www.jetbrains.com/company/brand/img/jetbrains_logo.png" width="100" alt="JetBrains" />
+</a>
 

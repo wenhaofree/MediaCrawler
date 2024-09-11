@@ -6,20 +6,30 @@ from playwright.async_api import BrowserContext, BrowserType
 
 class AbstractCrawler(ABC):
     @abstractmethod
-    def init_config(self, platform: str, login_type: str, crawler_type: str, start_page: int, keyword: str):
-        pass
-
-    @abstractmethod
     async def start(self):
+        """
+        start crawler
+        """
         pass
 
     @abstractmethod
     async def search(self):
+        """
+        search
+        """
         pass
 
     @abstractmethod
     async def launch_browser(self, chromium: BrowserType, playwright_proxy: Optional[Dict], user_agent: Optional[str],
                              headless: bool = True) -> BrowserContext:
+        """
+        launch browser
+        :param chromium: chromium browser
+        :param playwright_proxy: playwright proxy
+        :param user_agent: user agent
+        :param headless: headless mode
+        :return: browser context
+        """
         pass
 
 
@@ -52,16 +62,18 @@ class AbstractStore(ABC):
 
     # TODO support all platform
     # only xhs is supported, so @abstractmethod is commented
-    # @abstractmethod
+    @abstractmethod
     async def store_creator(self, creator: Dict):
         pass
 
+
 class AbstractStoreImage(ABC):
-    #TODO: support all platform
+    # TODO: support all platform
     # only weibo is supported
     # @abstractmethod
     async def store_image(self, image_content_item: Dict):
         pass
+
 
 class AbstractApiClient(ABC):
     @abstractmethod
@@ -70,8 +82,4 @@ class AbstractApiClient(ABC):
 
     @abstractmethod
     async def update_cookies(self, browser_context: BrowserContext):
-        pass
-
-    @abstractmethod
-    async def pong(self):
         pass
