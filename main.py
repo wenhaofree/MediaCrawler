@@ -35,19 +35,21 @@ class CrawlerFactory:
 
 
 async def main():
-    # parse cmd
-    await cmd_arg.parse_cmd()
+    try: 
+        # parse cmd
+        await cmd_arg.parse_cmd()
 
-    # init db
-    if config.SAVE_DATA_OPTION == "db":
-        await db.init_db()
+        # init db
+        if config.SAVE_DATA_OPTION == "db":
+            await db.init_db()
 
-    crawler = CrawlerFactory.create_crawler(platform=config.PLATFORM)
-    await crawler.start()
+        crawler = CrawlerFactory.create_crawler(platform=config.PLATFORM)
+        await crawler.start()
 
-    if config.SAVE_DATA_OPTION == "db":
-        await db.close()
-
+        if config.SAVE_DATA_OPTION == "db":
+            await db.close()
+    except Exception as e:
+        print(f"An error occurred: {e}")
     # TODO: 存储Notion
     if config.PLATFORM == "xhs":
         xhs_notion_main(config.KEYWORDS)

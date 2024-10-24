@@ -73,6 +73,12 @@
 5. 运行爬虫程序
 
    ```shell
+   # 优先配置文件: config/base_config.py
+      - 设置搜索关键词
+      - 设置对应平台
+      - 设置对应平台的Cookie
+      - 设置搜索类型,搜索模式
+
    # 从配置文件中读取关键词搜索相关的帖子并爬去帖子信息与评论
    python main.py --platform xhs --lt qrcode --type search
    
