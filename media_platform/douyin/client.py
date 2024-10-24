@@ -1,3 +1,14 @@
+# 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：  
+# 1. 不得用于任何商业用途。  
+# 2. 使用时应遵守目标平台的使用条款和robots.txt规则。  
+# 3. 不得进行大规模爬取或对平台造成运营干扰。  
+# 4. 应合理控制请求频率，避免给目标平台带来不必要的负担。   
+# 5. 不得用于任何非法或不当的用途。
+#   
+# 详细许可条款请参阅项目根目录下的LICENSE文件。  
+# 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。  
+
+
 import asyncio
 import copy
 import json
@@ -34,7 +45,7 @@ class DOUYINClient(AbstractApiClient):
         self.cookie_dict = cookie_dict
 
     async def __process_req_params(
-            self, params: Optional[Dict] = None, headers: Optional[Dict] = None,
+            self, uri: str, params: Optional[Dict] = None, headers: Optional[Dict] = None,
             request_method="GET"
     ):
 
@@ -73,11 +84,11 @@ class DOUYINClient(AbstractApiClient):
         params.update(common_params)
         query_string = urllib.parse.urlencode(params)
 
-        # 20240610 a-bogus更新（Playwright版本）
+        # 20240927 a-bogus更新（JS版本）
         post_data = {}
         if request_method == "POST":
             post_data = params
-        a_bogus = await get_a_bogus(query_string, post_data, headers["User-Agent"], self.playwright_page)
+        a_bogus = await get_a_bogus(uri, query_string, post_data, headers["User-Agent"], self.playwright_page)
         params["a_bogus"] = a_bogus
 
     async def request(self, method, url, **kwargs):
@@ -98,12 +109,12 @@ class DOUYINClient(AbstractApiClient):
         """
         GET请求
         """
-        await self.__process_req_params(params, headers)
+        await self.__process_req_params(uri, params, headers)
         headers = headers or self.headers
         return await self.request(method="GET", url=f"{self._host}{uri}", params=params, headers=headers)
 
     async def post(self, uri: str, data: dict, headers: Optional[Dict] = None):
-        await self.__process_req_params(data, headers)
+        await self.__process_req_params(uri, data, headers)
         headers = headers or self.headers
         return await self.request(method="POST", url=f"{self._host}{uri}", data=data, headers=headers)
 
