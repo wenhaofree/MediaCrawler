@@ -11,14 +11,14 @@
 
 # 基础配置
 PLATFORM = "xhs"
-KEYWORDS = "英语资料电子版" # 关键词搜索配置，以英文逗号分隔
+KEYWORDS = "小学英语教辅推荐" # 关键词搜索配置，以英文逗号分隔
 LOGIN_TYPE = "cookie"  # qrcode or phone or cookie
 COOKIES = "abRequestId=170d3834-b025-5f77-8ce2-dbc039bdc4e6; a1=19127e9a2eahvko8jlye9okhxrt9op4ekhslyxyw030000157011; webId=f6780f1cc70aa2eeb20610ac53419cb1; gid=yjyJWdj0WKTiyjyJWdj0JxCvd0xhTlYV1vdjME8lTxCF91q8jlU4dv888y2W8yy8fjyDJ0if; web_session=040069799c758c3a498e5f1bd4344bbb8a0d1c; x-user-id-creator.xiaohongshu.com=5b4e046811be1031e22f19d8; customerClientId=150421452775201; access-token-creator.xiaohongshu.com=customer.creator.AT-68c517425826995539550490mnac8v9dsgtuhmfa; galaxy_creator_session_id=5J2PJF7Iu9Pb1yCCQAy6aKxYzIVSqtnWD6hX; galaxy.creator.beaker.session.id=1728960079291082233353; webBuild=4.40.2; xsecappid=xhs-pc-web; acw_tc=53b47a884eee2e1532cf9eb4465a3e7f82189add35cc3d7b0ef6df46fc8ba052; websectiga=29098a4cf41f76ee3f8db19051aaa60c0fc7c5e305572fec762da32d457d76ae; sec_poison_id=65ef729c-9eb2-4e71-99df-dcee338118a6; unread={%22ub%22:%226717e4590000000024019d5e%22%2C%22ue%22:%226718d2a700000000240195db%22%2C%22uc%22:25}"
 # 具体值参见media_platform.xxx.field下的枚举值，暂时只支持小红书
 SORT_TYPE = "general"  # 基础: general  流行: popularity_descending  最新: time_descending
 # 具体值参见media_platform.xxx.field下的枚举值，暂时只支持抖音
 PUBLISH_TIME_TYPE = 0
-CRAWLER_TYPE = "search"  # 爬取类型，search(关键词搜索) | detail(帖子详情)| creator(创作者主页数据)
+CRAWLER_TYPE = "creator"  # 爬取类型，search(关键词搜索) | detail(帖子详情)| creator(创作者主页数据)
 
 # 是否开启 IP 代理
 ENABLE_IP_PROXY = False
@@ -60,7 +60,7 @@ MAX_CONCURRENCY_NUM = 1
 ENABLE_GET_IMAGES = False
 
 # 是否开启爬评论模式, 默认开启爬评论
-ENABLE_GET_COMMENTS = True
+ENABLE_GET_COMMENTS = False
 
 # 爬取一级评论的数量控制(单视频/帖子)
 CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
@@ -135,7 +135,7 @@ TIEBA_CREATOR_URL_LIST = [
 
 # 指定小红书创作者ID列表
 XHS_CREATOR_ID_LIST = [
-    "63e36c9a000000002703502b",
+    "659d095000000000220041e4",
     # ........................
 ]
 

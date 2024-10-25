@@ -187,12 +187,13 @@ def notion_data_save(client, pages,global_config_keyword):
     with open(file_path, 'a') as f:
         for page in pages:
             if page is not None:
-                # 时间格式化
+                # 时间格式化 source_keyword
                 page['time'] = time_fromat(page['time'])
                 page['last_modify_ts'] = time_fromat(page['last_modify_ts'])
                 page['last_update_time'] = time_fromat(page['last_update_time'])
                 # page['keyword'] = config.KEYWORDS
-                page['keyword'] = global_config_keyword
+                # page['keyword'] = global_config_keyword
+                page['keyword'] = page['source_keyword']
                 # 标签处理
                 tag_list_array = page['tag_list'].split(',')
                 data = {"multi_select": []}
@@ -204,7 +205,11 @@ def notion_data_save(client, pages,global_config_keyword):
 
                 page['tags'] = data["multi_select"]
                 # 保存Notion
-                new_page = client.create_page(page)
+                try:
+                    new_page = client.create_page(page)
+                except Exception as e:
+                    print('[异常]保存Notion失败:{e}')
+                    continue
 
                 page_id = new_page["id"]
                 node_id = page['note_id']
@@ -263,6 +268,7 @@ def parse_json_files(exist_ids, filename):
             # 判断数据是否存在
             if note_id in exist_ids:
                 continue
+            note_url=row['note_url'].split('?')[0]
             page = {
                 'note_id': note_id,
                 'type': row['type'],
@@ -283,7 +289,8 @@ def parse_json_files(exist_ids, filename):
                 'tag_list': row['tag_list'],
                 'tag_list': row['tag_list'],
                 'last_modify_ts': row['last_modify_ts'],
-                'note_url': row['note_url'],
+                'note_url': note_url,
+                'source_keyword': row['source_keyword'],
             }
             pages.append(page)
     return pages
@@ -306,6 +313,9 @@ def main(keyword:None):
     '''
     client = NotionClient()
     json_files = get_json_files()
+    if len(json_files) == 0:
+        print('没有找到json文件')
+        return
     exist_ids = get_message_ids()
     for file_path in json_files:
         if "contents" in file_path:
