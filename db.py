@@ -16,6 +16,8 @@
 import asyncio
 from typing import Dict
 from urllib.parse import urlparse
+import os
+import logging
 
 import aiofiles
 import aiomysql
@@ -24,6 +26,7 @@ import config
 from async_db import AsyncMysqlDB
 from tools import utils
 from var import db_conn_pool_var, media_crawler_db_var
+from config.db_config import DB_CONFIG  # 确保正确导入配置
 
 
 async def init_mediacrawler_db():
@@ -32,19 +35,29 @@ async def init_mediacrawler_db():
     Returns:
 
     """
-    pool = await aiomysql.create_pool(
-        host=config.RELATION_DB_HOST,
-        port=config.RELATION_DB_PORT,
-        user=config.RELATION_DB_USER,
-        password=config.RELATION_DB_PWD,
-        db=config.RELATION_DB_NAME,
-        autocommit=True,
-    )
-    async_db_obj = AsyncMysqlDB(pool)
+    try:
+        # 使用 DB_CONFIG 中的配置
+        pool = await aiomysql.create_pool(
+            host=DB_CONFIG["host"],
+            port=DB_CONFIG["port"],
+            user=DB_CONFIG["user"],
+            password=DB_CONFIG["password"],
+            db=DB_CONFIG["db"],
+            charset=DB_CONFIG["charset"],
+            autocommit=True
+        )
+        logging.info(f"成功连接到数据库 {DB_CONFIG['host']}:{DB_CONFIG['port']}")
+        async_db_obj = AsyncMysqlDB(pool)
 
-    # 将连接池对象和封装的CRUD sql接口对象放到上下文变量中
-    db_conn_pool_var.set(pool)
-    media_crawler_db_var.set(async_db_obj)
+        # 将连接池对象和封装的CRUD sql接口对象放到上下文变量中
+        db_conn_pool_var.set(pool)
+        media_crawler_db_var.set(async_db_obj)
+        return pool
+    except Exception as e:
+        # 打印详细的错误信息，帮助调试
+        logging.error(f"数据库连接失败: {e}")
+        logging.error(f"当前配置: host={DB_CONFIG['host']}, port={DB_CONFIG['port']}, user={DB_CONFIG['user']}, db={DB_CONFIG['db']}")
+        raise
 
 
 async def init_db():

@@ -11,6 +11,8 @@
 
 import asyncio
 import sys
+import os
+from dotenv import load_dotenv
 
 import cmd_arg
 import config
@@ -24,6 +26,8 @@ from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
 
+# 加载环境变量
+load_dotenv()
 
 class CrawlerFactory:
     CRAWLERS = {
