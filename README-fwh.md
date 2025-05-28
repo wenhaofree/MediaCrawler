@@ -1,112 +1,322 @@
-# 分支说明:
-1. main: 
-- 用于更新最新代码同步
-2. release:
-- 用于终端执行: 检索和同步Notion数据. 
-3. fwh-dev-v2.0:
-- 用于IDE程序中执行:检索和同步Notion数据
-4. fwh-dev-v3.0:
-- 2024年09月11日同步原作者代码后. 保留开发
-- 用于IDE程序中执行
-5. dev-v4-20250310:
-- 2025年03月10日同步原作者代码后. 保留开发
-- 用于IDE程序中执行
+# 🔥 MediaCrawler 自媒体爬虫 - 个人定制版 🕷️
+
+> **基于 [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) 项目的个人定制版本**
+>
+> 本项目在原版基础上增加了 Notion 数据同步功能，支持将爬取的数据直接保存到 Notion 数据库中。
+
+## 🌟 项目特色
+
+- 🚀 **多平台支持**: 支持小红书、抖音、快手、B站、微博、贴吧、知乎等7大主流平台
+- 📊 **Notion集成**: 独有的Notion数据同步功能，支持将爬取数据直接保存到Notion数据库
+- 🔄 **智能去重**: 基于唯一ID的去重机制，避免重复采集数据
+- 💾 **多种存储**: 支持CSV、JSON、MySQL数据库、Notion等多种数据存储方式
+- 🎯 **精准爬取**: 支持关键词搜索、指定帖子、创作者主页等多种爬取模式
+
+## 📋 分支说明
+
+| 分支名称 | 用途说明 | 更新时间 | 运行环境 |
+|---------|---------|---------|---------|
+| **main** | 用于更新最新代码同步 | 持续更新 | 通用 |
+| **release** | 终端执行版本，检索和同步Notion数据 | 稳定版 | 命令行 |
+| **fwh-dev-v2.0** | IDE程序中执行，检索和同步Notion数据 | 2024年 | IDE开发 |
+| **fwh-dev-v3.0** | 2024年09月11日同步原作者代码后保留开发 | 2024-09-11 | IDE开发 |
+| **dev-v4-20250310** | 2025年03月10日同步原作者代码后保留开发 | 2025-03-10 | IDE开发 |
 
 
-## 使用注意事项:
-1. 小红书账号检测机制, 一般使用速度过快会强制下线, 需要重新登陆;
-2. 抖音暂时未出现检测. 
-3. 
+## 🚨 使用注意事项
 
+### 平台检测机制
+| 平台 | 检测情况 | 解决方案 |
+|------|---------|---------|
+| 🔴 **小红书** | 速度过快会强制下线 | 控制爬取频率，重新登录 |
+| 🟢 **抖音** | 暂时未出现检测 | 正常使用 |
+| 🟡 **快手** | 二维码扫码无法登录 | 使用Cookie方式登录 |
+| 🟢 **B站** | 运行顺利 | 正常使用 |
+| 🟡 **微博** | 偶有限制 | 适当控制频率 |
+| 🟢 **贴吧** | 相对稳定 | 正常使用 |
+| 🟢 **知乎** | 相对稳定 | 需要Node.js环境 |
 
-## 个人注意事项:
-1. 搜索信息关键词,都在config目录的base_config里.  新增代码配置指定浏览器:executable_path=config.EXECUTABLE_PATH 
+### 登录方式说明
+- **二维码登录**: 需要手机扫码，部分平台可能需要手动验证
+- **Cookie登录**: 推荐方式，稳定性较高
+- **手机号登录**: 部分平台支持，需要短信验证
 
-2. 抖音登录需要二维码还有短信验证码登录. 需要接通安卓手机操作
-3. 小红书登录,二维码不回显有问题
-4. B站顺利
-5. 快手二维码扫码无法登录
-6. 解决方式采用cooker形式登录获取数据
-7. 数据限制20条,但是重新开始会出现重复采集的情况,需要用去重逻辑,根据node_id唯一值
-8. 增加Notion存储数据
+### 重要配置说明
+1. **关键词配置**: 在 `config/base_config.py` 中的 `KEYWORDS` 参数
+2. **浏览器配置**: 可指定浏览器路径 `executable_path=config.EXECUTABLE_PATH`
+3. **数据去重**: 基于 `note_id` 唯一值进行去重处理
+4. **Notion集成**: 支持将数据同步到Notion数据库，避免重复采集
 
-## 举例小红书爬取-编程版
-1. config目录，base_config配置文件，
-   修改xhs，搜索关键词， 登录方式Cookie，网页获取Cookie信息， 指定需要爬取的笔记ID列表（貌似影响不大），配置爬取数量
-2. 程序运行：
-    main.py运行
-3. 数据结果：
-      - 笔记信息同步到Notion中，同时可以通过修改配置，选择本地Excel还是Notion
-      - 笔记评论信息，再Excel文件夹中 data/xhs.  没有做Notion处理
-      - 同步过Notion的数据，会记录在Notion-xhs.json文件中，避免重复采集。
-      - 目前配置爬取数据200条
-4. base_config配置文件说明:
-      - 先选择平台: xhs
-      - 选择: 登录方式,需要配置Cookie信息
-      - 选择:爬取类型: 
-        - 搜索模式: 需要配置关键词
-        - 帖子详情: 需要配置帖子ID列表
-        - 作者模式: 需要配置作者的ID列表
-   
+## 🎯 功能特性详解
 
+### 支持的平台和功能
+| 平台 | 关键词搜索 | 指定帖子 | 二级评论 | 创作者主页 | 登录态缓存 | IP代理池 | 词云图 |
+|------|-----------|---------|---------|-----------|-----------|---------|--------|
+| 小红书 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 抖音 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 快手 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| B站 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 微博 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 贴吧 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 知乎 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-## 本地使用方法
+### 爬取模式说明
+- **🔍 搜索模式 (search)**: 根据关键词搜索相关内容
+- **📄 帖子详情 (detail)**: 爬取指定帖子ID的详细信息
+- **👤 创作者模式 (creator)**: 爬取指定创作者的主页数据
 
-1. 创建 python 虚拟环境
-   ```shell
-   python3 -m venv venv
+### 数据存储方式
+- **📊 CSV格式**: 保存到 `data/` 目录下的CSV文件
+- **🗄️ 数据库**: 支持MySQL数据库存储，具有去重功能
+- **📝 JSON格式**: 保存为JSON文件，便于数据处理
+- **📋 Notion**: 独有功能，直接同步到Notion数据库
+
+## 📖 小红书爬取示例
+
+### 配置步骤
+1. **修改配置文件** (`config/base_config.py`)
+   ```python
+   PLATFORM = "xhs"                    # 选择平台
+   KEYWORDS = "编程副业,编程兼职"        # 搜索关键词
+   LOGIN_TYPE = "cookie"               # 登录方式
+   CRAWLER_TYPE = "search"             # 爬取类型
+   CRAWLER_MAX_NOTES_COUNT = 200       # 爬取数量
+   SAVE_DATA_OPTION = "db"             # 存储方式
    ```
 
-2. 安装依赖库
-
-   ```shell
-   pip install -r requirements.txt
+2. **程序运行**
+   ```bash
+   python main.py --platform xhs --lt cookie --type search
    ```
 
-3. 安装playwright浏览器驱动
+3. **数据输出**
+   - ✅ **笔记信息**: 同步到Notion数据库 + 本地存储
+   - ✅ **评论信息**: 保存到 `data/xhs/` 目录
+   - ✅ **去重记录**: `Notion-xhs.json` 文件记录已同步数据
+   - ✅ **数据量**: 默认爬取200条数据
 
-   ```shell
-   pip install playwright
-   playwright install
-   ```
 
-4. 是否保存数据到DB中
 
-   如果选择开启，则需要配置数据库连接信息，`config/db_config.py` 中的 `IS_SAVED_DATABASED`和`RELATION_DB_URL` 变量。然后执行以下命令初始化数据库信息，生成相关的数据库表结构：
+## 🚀 快速开始
 
-   ```shell
-   python db.py
-   ```
+### 环境要求
+- **Python**: 3.9+ (推荐 3.9.6)
+- **Node.js**: 16+ (抖音和知乎爬取必需)
+- **操作系统**: Windows/macOS/Linux
 
-5. 运行爬虫程序
+### 安装步骤
 
-   ```shell
-   # 优先配置文件: config/base_config.py
-      - 设置搜索关键词
-      - 设置对应平台
-      - 设置对应平台的Cookie
-      - 设置搜索类型,搜索模式
+#### 1. 创建虚拟环境
+```bash
+# 创建虚拟环境
+python3 -m venv venv
 
-   # 从配置文件中读取关键词搜索相关的帖子并爬去帖子信息与评论
-   python main.py --platform xhs --lt qrcode --type search
-   
-   # 从配置文件中读取指定的帖子ID列表获取指定帖子的信息与评论信息
-   python main.py --platform xhs --lt qrcode --type detail
-   
-   # 其他平台爬虫使用示例, 执行下面的命令查看
-    python3 main.py --help
+# 激活虚拟环境
+# macOS/Linux:
+source venv/bin/activate
+# Windows:
+venv\Scripts\activate
+```
 
-    options:
-         -h, --help            show this help message and exit
-         --platform {xhs,dy,ks,bili}
-                                 Media platform select (xhs | dy | ks | bili)
-         --lt {qrcode,phone,cookie}
-                                 Login type (qrcode | phone | cookie)
-         --type {search,detail}
-                                 crawler type (search | detail)
-    
-   ```
+#### 2. 安装依赖
+```bash
+# 安装Python依赖
+pip install -r requirements.txt
 
-6. 打开对应APP扫二维码登录
+# 安装playwright浏览器驱动
+playwright install
+```
 
-7. 等待爬虫程序执行完毕，数据会保存到 `data/xhs` 目录下
+#### 3. 数据库配置 (可选)
+如果选择数据库存储，需要配置 `config/db_config.py`:
+
+```python
+# MySQL配置
+RELATION_DB_HOST = "localhost"
+RELATION_DB_PORT = 3306
+RELATION_DB_USER = "root"
+RELATION_DB_PWD = "your_password"
+RELATION_DB_NAME = "media_crawler"
+```
+
+然后初始化数据库表结构：
+```bash
+python db.py
+```
+
+#### 4. 基础配置
+修改 `config/base_config.py` 文件：
+
+```python
+# 基础配置
+PLATFORM = "xhs"                           # 平台选择
+KEYWORDS = "编程副业,编程兼职"               # 搜索关键词
+LOGIN_TYPE = "cookie"                       # 登录方式
+CRAWLER_TYPE = "search"                     # 爬取类型
+SAVE_DATA_OPTION = "db"                     # 存储方式
+CRAWLER_MAX_NOTES_COUNT = 200               # 爬取数量
+ENABLE_GET_COMMENTS = True                  # 是否爬取评论
+```
+
+#### 5. 运行程序
+
+```bash
+# 基础用法 - 关键词搜索
+python main.py --platform xhs --lt cookie --type search
+
+# 指定帖子爬取
+python main.py --platform xhs --lt cookie --type detail
+
+# 创作者主页爬取
+python main.py --platform xhs --lt cookie --type creator
+
+# 查看所有参数
+python main.py --help
+```
+
+### 命令行参数说明
+
+| 参数 | 选项 | 说明 |
+|------|------|------|
+| `--platform` | `xhs`, `dy`, `ks`, `bili`, `wb`, `tieba`, `zhihu` | 选择爬取平台 |
+| `--lt` | `qrcode`, `phone`, `cookie` | 登录方式 |
+| `--type` | `search`, `detail`, `creator` | 爬取类型 |
+| `--keywords` | 字符串 | 搜索关键词 |
+| `--save_data_option` | `csv`, `db`, `json` | 数据存储方式 |
+
+### 登录方式详解
+- **🔍 二维码登录**: 打开对应APP扫码登录，部分平台需要手动验证
+- **🍪 Cookie登录**: 从浏览器复制Cookie信息，推荐方式
+- **📱 手机号登录**: 输入手机号接收验证码
+
+### 数据输出
+程序执行完毕后，数据将保存到以下位置：
+- **CSV/JSON**: `data/{platform}/` 目录下
+- **数据库**: MySQL数据库中
+- **Notion**: Notion数据库中（如果配置）
+
+## 🔧 高级配置
+
+### Notion集成配置
+本项目独有的Notion集成功能，需要配置Notion API：
+
+```python
+# 在config/base_config.py中添加Notion配置
+NOTION_TOKEN = "your_notion_integration_token"
+NOTION_DATABASE_ID = "your_database_id"
+```
+
+### 代理配置
+```python
+# IP代理配置
+ENABLE_IP_PROXY = True
+IP_PROXY_POOL_COUNT = 5
+IP_PROXY_PROVIDER_NAME = "kuaidaili"
+```
+
+### 性能优化
+```python
+# 并发控制
+MAX_CONCURRENCY_NUM = 3
+CRAWLER_MAX_SLEEP_SEC = 2
+
+# 数据量控制
+CRAWLER_MAX_NOTES_COUNT = 500
+CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 20
+```
+
+## 🎨 平台特定配置
+
+### 小红书 (XHS)
+```python
+PLATFORM = "xhs"
+KEYWORDS = "编程副业,编程兼职"
+XHS_SPECIFIED_NOTE_URL_LIST = [
+    "https://www.xiaohongshu.com/explore/66fad51c000000001b0224b8?xsec_token=xxx&xsec_source=pc_search"
+]
+XHS_CREATOR_ID_LIST = ["63e36c9a000000002703502b"]
+```
+
+### 抖音 (DY)
+```python
+PLATFORM = "dy"
+KEYWORDS = "编程教程,技术分享"
+DY_SPECIFIED_ID_LIST = ["7280854932641664319"]
+DY_CREATOR_ID_LIST = ["MS4wLjABAAAATJPY7LAlaa5X-c8uNdWkvz0jUGgpw4eeXIwu_8BhvqE"]
+```
+
+### B站 (BILI)
+```python
+PLATFORM = "bili"
+KEYWORDS = "编程,算法"
+BILI_SPECIFIED_ID_LIST = ["BV1d54y1g7db"]
+BILI_CREATOR_ID_LIST = ["20813884"]
+START_DAY = '2024-01-01'
+END_DAY = '2024-12-31'
+```
+
+## 🛠️ 常见问题解决
+
+### 环境问题
+| 问题 | 解决方案 |
+|------|---------|
+| 缺少Node.js环境 | 安装Node.js 16+版本 |
+| playwright安装失败 | 使用 `playwright install --with-deps` |
+| 数据库连接失败 | 检查MySQL服务和配置信息 |
+
+### 登录问题
+| 平台 | 常见问题 | 解决方案 |
+|------|---------|---------|
+| 小红书 | 滑块验证失败 | 设置 `HEADLESS = False`，手动验证 |
+| 抖音 | 手机号验证 | 准备安卓手机接收验证码 |
+| 快手 | 二维码失效 | 使用Cookie登录方式 |
+
+### 数据问题
+- **重复数据**: 启用数据库存储，自动去重
+- **数据缺失**: 检查网络连接和平台限制
+- **Notion同步失败**: 验证API Token和数据库ID
+
+## 📊 项目结构
+
+```
+MediaCrawler/
+├── 📁 config/              # 配置文件
+│   ├── base_config.py      # 基础配置
+│   └── db_config.py        # 数据库配置
+├── 📁 media_platform/      # 平台实现
+│   ├── xhs/               # 小红书
+│   ├── douyin/            # 抖音
+│   ├── bilibili/          # B站
+│   └── ...                # 其他平台
+├── 📁 store/              # 数据存储
+├── 📁 data/               # 数据输出目录
+├── 📄 main.py             # 程序入口
+└── 📄 requirements.txt    # 依赖列表
+```
+
+## 🤝 贡献指南
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+## 📄 免责声明
+
+⚠️ **重要提醒**：
+- 本项目仅供学习和研究使用
+- 请遵守各平台的使用条款和robots.txt规则
+- 不得用于商业用途或大规模爬取
+- 使用时请控制请求频率，避免对平台造成负担
+- 用户需自行承担使用本项目的法律责任
+
+## 📞 联系方式
+
+- **原项目**: [NanmiCoder/MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)
+- **问题反馈**: 请在GitHub Issues中提交
+- **功能建议**: 欢迎提交Pull Request
+
+---
+
+⭐ **如果这个项目对你有帮助，请给个Star支持一下！** ⭐
