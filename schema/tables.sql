@@ -16,7 +16,11 @@ CREATE TABLE `bilibili_video`
     `desc`             longtext COMMENT '视频描述',
     `create_time`      bigint      NOT NULL COMMENT '视频发布时间戳',
     `liked_count`      varchar(16)  DEFAULT NULL COMMENT '视频点赞数',
+    `disliked_count`   varchar(16) DEFAULT NULL COMMENT '视频点踩数',
     `video_play_count` varchar(16)  DEFAULT NULL COMMENT '视频播放数量',
+    `video_favorite_count` varchar(16) DEFAULT NULL COMMENT '视频收藏数量',
+    `video_share_count` varchar(16) DEFAULT NULL COMMENT '视频分享数量',
+    `video_coin_count` varchar(16) DEFAULT NULL COMMENT '视频投币数量',
     `video_danmaku`    varchar(16)  DEFAULT NULL COMMENT '视频弹幕数量',
     `video_comment`    varchar(16)  DEFAULT NULL COMMENT '视频评论数量',
     `video_url`        varchar(512) DEFAULT NULL COMMENT '视频详情URL',
@@ -35,6 +39,8 @@ CREATE TABLE `bilibili_video_comment`
     `id`                int         NOT NULL AUTO_INCREMENT COMMENT '自增ID',
     `user_id`           varchar(64)  DEFAULT NULL COMMENT '用户ID',
     `nickname`          varchar(64)  DEFAULT NULL COMMENT '用户昵称',
+    `sex`               varchar(64) DEFAULT NULL COMMENT '用户性别',
+    `sign`              varchar(64) DEFAULT NULL COMMENT '用户签名',
     `avatar`            varchar(255) DEFAULT NULL COMMENT '用户头像地址',
     `add_ts`            bigint      NOT NULL COMMENT '记录添加时间戳',
     `last_modify_ts`    bigint      NOT NULL COMMENT '记录最后修改时间戳',
@@ -57,6 +63,8 @@ CREATE TABLE `bilibili_up_info`
     `id`             int    NOT NULL AUTO_INCREMENT COMMENT '自增ID',
     `user_id`        varchar(64)  DEFAULT NULL COMMENT '用户ID',
     `nickname`       varchar(64)  DEFAULT NULL COMMENT '用户昵称',
+    `sex`            varchar(64) DEFAULT NULL COMMENT '用户性别',
+    `sign`           varchar(64) DEFAULT NULL COMMENT '用户签名',
     `avatar`         varchar(255) DEFAULT NULL COMMENT '用户头像地址',
     `add_ts`         bigint NOT NULL COMMENT '记录添加时间戳',
     `last_modify_ts` bigint NOT NULL COMMENT '记录最后修改时间戳',
@@ -67,6 +75,50 @@ CREATE TABLE `bilibili_up_info`
     PRIMARY KEY (`id`),
     KEY              `idx_bilibili_vi_user_123456` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='B 站UP主信息';
+
+-- ----------------------------
+-- Table structure for bilibili_contact_info
+-- ----------------------------
+DROP TABLE IF EXISTS `bilibili_contact_info`;
+CREATE TABLE `bilibili_contact_info`
+(
+    `id`             int    NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `up_id`          varchar(64)  DEFAULT NULL COMMENT 'up主ID',
+    `fan_id`         varchar(64)  DEFAULT NULL COMMENT '粉丝ID',
+    `up_name`        varchar(64)  DEFAULT NULL COMMENT 'up主昵称',
+    `fan_name`       varchar(64)  DEFAULT NULL COMMENT '粉丝昵称',
+    `up_sign`        longtext     DEFAULT NULL COMMENT 'up主签名',
+    `fan_sign`       longtext     DEFAULT NULL COMMENT '粉丝签名',
+    `up_avatar`      varchar(255) DEFAULT NULL COMMENT 'up主头像地址',
+    `fan_avatar`     varchar(255) DEFAULT NULL COMMENT '粉丝头像地址',
+    `add_ts`         bigint NOT NULL COMMENT '记录添加时间戳',
+    `last_modify_ts` bigint NOT NULL COMMENT '记录最后修改时间戳',
+    PRIMARY KEY (`id`),
+    KEY              `idx_bilibili_contact_info_up_id` (`up_id`),
+    KEY              `idx_bilibili_contact_info_fan_id` (`fan_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='B 站联系人信息';
+
+-- ----------------------------
+-- Table structure for bilibili_up_dynamic
+-- ----------------------------
+DROP TABLE IF EXISTS `bilibili_up_dynamic`;
+CREATE TABLE `bilibili_up_dynamic`
+(
+    `id`             int    NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+    `dynamic_id`     varchar(64)  DEFAULT NULL COMMENT '动态ID',
+    `user_id`        varchar(64)  DEFAULT NULL COMMENT '用户ID',
+    `user_name`      varchar(64)  DEFAULT NULL COMMENT '用户名',
+    `text`           longtext     DEFAULT NULL COMMENT '动态文本',
+    `type`           varchar(64)  DEFAULT NULL COMMENT '动态类型',
+    `pub_ts`         bigint DEFAULT NULL COMMENT '动态发布时间',
+    `total_comments` bigint       DEFAULT NULL COMMENT '评论数',
+    `total_forwards` bigint       DEFAULT NULL COMMENT '转发数',
+    `total_liked`    bigint       DEFAULT NULL COMMENT '点赞数',
+    `add_ts`         bigint NOT NULL COMMENT '记录添加时间戳',
+    `last_modify_ts` bigint NOT NULL COMMENT '记录最后修改时间戳',
+    PRIMARY KEY (`id`),
+    KEY              `idx_bilibili_up_dynamic_dynamic_id` (`dynamic_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='B 站up主动态信息';
 
 -- ----------------------------
 -- Table structure for douyin_aweme
@@ -87,7 +139,7 @@ CREATE TABLE `douyin_aweme`
     `last_modify_ts`  bigint      NOT NULL COMMENT '记录最后修改时间戳',
     `aweme_id`        varchar(64) NOT NULL COMMENT '视频ID',
     `aweme_type`      varchar(16) NOT NULL COMMENT '视频类型',
-    `title`           varchar(500) DEFAULT NULL COMMENT '视频标题',
+    `title`           varchar(1024) DEFAULT NULL COMMENT '视频标题',
     `desc`            longtext COMMENT '视频描述',
     `create_time`     bigint      NOT NULL COMMENT '视频发布时间戳',
     `liked_count`     varchar(16)  DEFAULT NULL COMMENT '视频点赞数',
@@ -455,7 +507,7 @@ CREATE TABLE `tieba_creator`
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='贴吧创作者';
 
-
+DROP TABLE IF EXISTS `zhihu_content`;
 CREATE TABLE `zhihu_content` (
     `id` int NOT NULL AUTO_INCREMENT COMMENT '自增ID',
     `content_id` varchar(64) NOT NULL COMMENT '内容ID',
@@ -483,7 +535,7 @@ CREATE TABLE `zhihu_content` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知乎内容（回答、文章、视频）';
 
 
-
+DROP TABLE IF EXISTS `zhihu_comment`;
 CREATE TABLE `zhihu_comment` (
     `id` int NOT NULL AUTO_INCREMENT COMMENT '自增ID',
     `comment_id` varchar(64) NOT NULL COMMENT '评论ID',
@@ -508,7 +560,7 @@ CREATE TABLE `zhihu_comment` (
     KEY `idx_zhihu_comment_publish_time` (`publish_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知乎评论';
 
-
+DROP TABLE IF EXISTS `zhihu_creator`;
 CREATE TABLE `zhihu_creator` (
     `id` int NOT NULL AUTO_INCREMENT COMMENT '自增ID',
     `user_id` varchar(64) NOT NULL COMMENT '用户ID',

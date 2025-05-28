@@ -89,8 +89,11 @@ class BilibiliCrawler(AbstractCrawler):
                 # Get the information and comments of the specified post
                 await self.get_specified_videos(config.BILI_SPECIFIED_ID_LIST)
             elif config.CRAWLER_TYPE == "creator":
-                for creator_id in config.BILI_CREATOR_ID_LIST:
-                    await self.get_creator_videos(int(creator_id))
+                if config.CREATOR_MODE:
+                    for creator_id in config.BILI_CREATOR_ID_LIST:
+                        await self.get_creator_videos(int(creator_id))
+                else:
+                    await self.get_all_creator_details(config.BILI_CREATOR_ID_LIST)
             else:
                 pass
             utils.logger.info(
@@ -125,7 +128,7 @@ class BilibiliCrawler(AbstractCrawler):
             end_day = end_day + timedelta(days=1) - timedelta(seconds=1)  # 则将 end_day 设置为 end_day + 1 day - 1 second
         # 将其重新转换为时间戳
         return str(int(start_day.timestamp())), str(int(end_day.timestamp()))
-        
+
     async def search(self):
         """
         search bilibili video with keywords
@@ -161,7 +164,11 @@ class BilibiliCrawler(AbstractCrawler):
                     video_list: List[Dict] = videos_res.get("result")
 
                     semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
-                    task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in video_list]
+                    task_list = []
+                    try:
+                        task_list = [self.get_video_info_task(aid=video_item.get("aid"), bvid="", semaphore=semaphore) for video_item in video_list]
+                    except Exception as e:
+                        utils.logger.warning(f"[BilibiliCrawler.search] error in the task list. The video for this page will not be included. {e}")
                     video_items = await asyncio.gather(*task_list)
                     for video_item in video_items:
                         if video_item:
@@ -171,16 +178,19 @@ class BilibiliCrawler(AbstractCrawler):
                             await self.get_bilibili_video(video_item, semaphore)
                     page += 1
                     await self.batch_get_video_comments(video_id_list)
-            # 按照 START_DAY 至 END_DAY 按照每一天进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下的所有视频
+            # 按照 START_DAY 至 END_DAY 按照每一天进行筛选，这样能够突破 1000 条视频的限制，最大程度爬取该关键词下每一天的所有视频
             else:
                 for day in pd.date_range(start=config.START_DAY, end=config.END_DAY, freq='D'):
                     # 按照每一天进行爬取的时间戳参数
                     pubtime_begin_s, pubtime_end_s = await self.get_pubtime_datetime(start=day.strftime('%Y-%m-%d'), end=day.strftime('%Y-%m-%d'))
                     page = 1
+                    #!该段 while 语句在发生异常时（通常情况下为当天数据为空时）会自动跳转到下一天，以实现最大程度爬取该关键词下当天的所有视频
+                    #!除了仅保留现在原有的 try, except Exception 语句外，不要再添加其他的异常处理！！！否则将使该段代码失效，使其仅能爬取当天一天数据而无法跳转到下一天
+                    #!除非将该段代码的逻辑进行重构以实现相同的功能，否则不要进行修改！！！
                     while (page - start_page + 1) * bili_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
-                        # ! Catch any error if response return nothing, go to next day
+                        #! Catch any error if response return nothing, go to next day
                         try:
-                            # ! Don't skip any page, to make sure gather all video in one day
+                            #! Don't skip any page, to make sure gather all video in one day
                             # if page < start_page:
                             #     utils.logger.info(f"[BilibiliCrawler.search] Skip page: {page}")
                             #     page += 1
@@ -459,3 +469,121 @@ class BilibiliCrawler(AbstractCrawler):
         extension_file_name = f"video.mp4"
         await bilibili_store.store_video(aid, content, extension_file_name)
 
+    async def get_all_creator_details(self, creator_id_list: List[int]):
+        """
+        creator_id_list: get details for creator from creator_id_list
+        """
+        utils.logger.info(
+            f"[BilibiliCrawler.get_creator_details] Crawling the detalis of creator")
+        utils.logger.info(
+            f"[BilibiliCrawler.get_creator_details] creator ids:{creator_id_list}")
+
+        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        task_list: List[Task] = []
+        try:
+            for creator_id in creator_id_list:
+                task = asyncio.create_task(self.get_creator_details(
+                    creator_id, semaphore), name=creator_id)
+                task_list.append(task)
+        except Exception as e:
+            utils.logger.warning(
+                f"[BilibiliCrawler.get_all_creator_details] error in the task list. The creator will not be included. {e}")
+
+        await asyncio.gather(*task_list)
+
+    async def get_creator_details(self, creator_id: int, semaphore: asyncio.Semaphore):
+        """
+        get details for creator id
+        :param creator_id:
+        :param semaphore:
+        :return:
+        """
+        async with semaphore:
+            creator_unhandled_info: Dict = await self.bili_client.get_creator_info(creator_id)
+            creator_info: Dict = {
+                "id": creator_id,
+                "name": creator_unhandled_info.get("name"),
+                "sign": creator_unhandled_info.get("sign"),
+                "avatar": creator_unhandled_info.get("face"),
+            }
+        await self.get_fans(creator_info, semaphore)
+        await self.get_followings(creator_info, semaphore)
+        await self.get_dynamics(creator_info, semaphore)
+
+    async def get_fans(self, creator_info: Dict, semaphore: asyncio.Semaphore):
+        """
+        get fans for creator id
+        :param creator_info:
+        :param semaphore:
+        :return:
+        """
+        creator_id = creator_info["id"]
+        async with semaphore:
+            try:
+                utils.logger.info(
+                    f"[BilibiliCrawler.get_fans] begin get creator_id: {creator_id} fans ...")
+                await self.bili_client.get_creator_all_fans(
+                    creator_info=creator_info,
+                    crawl_interval=random.random(),
+                    callback=bilibili_store.batch_update_bilibili_creator_fans,
+                    max_count=config.CRAWLER_MAX_CONTACTS_COUNT_SINGLENOTES,
+                )
+
+            except DataFetchError as ex:
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_fans] get creator_id: {creator_id} fans error: {ex}")
+            except Exception as e:
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_fans] may be been blocked, err:{e}")
+
+    async def get_followings(self, creator_info: Dict, semaphore: asyncio.Semaphore):
+        """
+        get followings for creator id
+        :param creator_info:
+        :param semaphore:
+        :return:
+        """
+        creator_id = creator_info["id"]
+        async with semaphore:
+            try:
+                utils.logger.info(
+                    f"[BilibiliCrawler.get_followings] begin get creator_id: {creator_id} followings ...")
+                await self.bili_client.get_creator_all_followings(
+                    creator_info=creator_info,
+                    crawl_interval=random.random(),
+                    callback=bilibili_store.batch_update_bilibili_creator_followings,
+                    max_count=config.CRAWLER_MAX_CONTACTS_COUNT_SINGLENOTES,
+                )
+
+            except DataFetchError as ex:
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_followings] get creator_id: {creator_id} followings error: {ex}")
+            except Exception as e:
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_followings] may be been blocked, err:{e}")
+
+    async def get_dynamics(self, creator_info: Dict, semaphore: asyncio.Semaphore):
+        """
+        get dynamics for creator id
+        :param creator_info:
+        :param semaphore:
+        :return:
+        """
+        creator_id = creator_info["id"]
+        async with semaphore:
+            try:
+                utils.logger.info(
+                    f"[BilibiliCrawler.get_dynamics] begin get creator_id: {creator_id} dynamics ...")
+                await self.bili_client.get_creator_all_dynamics(
+                    creator_info=creator_info,
+                    crawl_interval=random.random(),
+                    callback=bilibili_store.batch_update_bilibili_creator_dynamics,
+                    max_count=config.CRAWLER_MAX_DYNAMICS_COUNT_SINGLENOTES,
+                )
+
+            except DataFetchError as ex:
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_dynamics] get creator_id: {creator_id} dynamics error: {ex}")
+            except Exception as e:
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_dynamics] may be been blocked, err:{e}")

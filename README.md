@@ -40,11 +40,12 @@
 [MediaCrawlerPro](https://github.com/MediaCrawlerPro) 版本已经重构出来了，相较于开源版本的优势：
 - 多账号+IP代理支持（重点！）
 - 去除Playwright依赖，使用更加简单
-- 支持linux部署（Docker docker-compose）
+- 支持linux环境使用
 - 代码重构优化，更加易读易维护（解耦JS签名逻辑）
 - 代码质量更高，对于构建更大型的爬虫项目更加友好
 - 完美的架构设计，更加易扩展，源码学习的价值更大
-- Pro中新增全新的自媒体视频下载器桌面端软件（全栈项目适合学习）
+- Pro中新增全新的自媒体视频下载器桌面端软件（适合学习全栈项目开发）
+- 支持多个平台的首页信息流推荐（HomeFeed）
 
 
 # 安装部署方法
@@ -52,6 +53,7 @@
 
 ## 创建并激活 python 虚拟环境
 > 如果是爬取抖音和知乎，需要提前安装nodejs环境，版本大于等于：`16`即可 <br>
+> 新增 [uv](https://github.com/astral-sh/uv) 来管理项目依赖，使用uv来替代python版本管理、pip进行依赖安装，更加方便快捷
    ```shell   
    # 进入项目根目录
    cd MediaCrawler
@@ -122,8 +124,16 @@
 [加入微信交流群](https://nanmicoder.github.io/MediaCrawler/%E5%BE%AE%E4%BF%A1%E4%BA%A4%E6%B5%81%E7%BE%A4.html)
   
 # 感谢下列Sponsors对本仓库赞助支持
-- <a href="https://www.ipwo.net/?ref=mediacrawler">【IPWO住宅代理】免费流量测试，9000万+海外纯净真实住宅IP，全球覆盖，高品质代理服务提供商</a>
-- <a href="https://sider.ai/ad-land-redirect?source=github&p1=mi&p2=kk">【Sider】全网最火的ChatGPT插件，我也免费薅羊毛用了快一年了，体验拉满。</a>
+<a href="https://www.swiftproxy.net/?ref=nanmi">
+<img src="docs/static/images/img_5.png">
+<br>
+Swiftproxy-90M+全球高质量纯净住宅IP，注册可领免费500MB测试流量，动态流量不过期！
+> 我推荐的专属折扣码：GHB5 立享九折优惠！
+</a>
+
+<br>
+<br>
+<a href="https://sider.ai/ad-land-redirect?source=github&p1=mi&p2=kk">【Sider】全网最火的ChatGPT插件，我也免费薅羊毛用了快一年了，体验拉满。</a>
 
 成为赞助者，可以将您产品展示在这里，每天获得大量曝光，联系作者微信：yzglan 或 email：relakkes@gmail.com
 
