@@ -201,6 +201,8 @@ uv run main.py --platform xhs --lt qrcode --type search
 # 从配置文件中读取指定的帖子ID列表获取指定帖子的信息与评论信息
 uv run main.py --platform xhs --lt qrcode --type detail
 
+# postgresql 存储数据， 默认存储20条数据；
+uv run python main.py --platform xhs --lt qrcode --type search --save_data_option postgresql
 # 打开对应APP扫二维码登录
 
 # 其他平台爬虫使用示例，执行下面的命令查看
