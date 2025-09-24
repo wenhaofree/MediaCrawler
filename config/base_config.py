@@ -10,7 +10,7 @@
 
 # 基础配置
 PLATFORM = "xhs"  # 平台，xhs | dy | ks | bili | wb | tieba | zhihu
-KEYWORDS = "独立开发"  # 关键词搜索配置，以英文逗号分隔
+KEYWORDS = "AI"  # 关键词搜索配置，以英文逗号分隔
 LOGIN_TYPE = "qrcode"  # qrcode or phone or cookie
 COOKIES = ""
 CRAWLER_TYPE = (
@@ -62,7 +62,7 @@ BROWSER_LAUNCH_TIMEOUT = 30
 AUTO_CLOSE_BROWSER = True
 
 # 数据保存类型选项配置,支持四种类型：csv、db、json、sqlite, 最好保存到DB，有排重的功能。
-SAVE_DATA_OPTION = "db"  # csv or db or json or sqlite
+SAVE_DATA_OPTION = "postgresql"  # csv or db or json or sqlite or postgresql
 
 # 用户浏览器缓存的浏览器文件配置
 USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name

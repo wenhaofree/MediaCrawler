@@ -77,7 +77,7 @@ def cleanup():
     if crawler:
         # asyncio.run(crawler.close())
         pass
-    if config.SAVE_DATA_OPTION in ["db", "sqlite"]:
+    if config.SAVE_DATA_OPTION in ["db", "sqlite", "postgresql"]:
         asyncio.run(db.close())
 
 

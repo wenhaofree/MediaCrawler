@@ -43,3 +43,18 @@ SQLITE_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "datab
 sqlite_db_config = {
     "db_path": SQLITE_DB_PATH
 }
+
+# postgresql config
+POSTGRESQL_DB_HOST = os.getenv("POSTGRESQL_DB_HOST", "localhost")
+POSTGRESQL_DB_PORT = os.getenv("POSTGRESQL_DB_PORT", 5432)
+POSTGRESQL_DB_USER = os.getenv("POSTGRESQL_DB_USER", "root")
+POSTGRESQL_DB_PWD = os.getenv("POSTGRESQL_DB_PWD", "fuwenhao")
+POSTGRESQL_DB_NAME = os.getenv("POSTGRESQL_DB_NAME", "media_crawler_db")
+
+postgresql_db_config = {
+    "host": POSTGRESQL_DB_HOST,
+    "port": POSTGRESQL_DB_PORT,
+    "user": POSTGRESQL_DB_USER,
+    "password": POSTGRESQL_DB_PWD,
+    "db_name": POSTGRESQL_DB_NAME,
+}

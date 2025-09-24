@@ -36,11 +36,11 @@ async def parse_cmd():
     parser.add_argument('--get_sub_comment', type=str2bool,
                         help=''''Whether to crawl level two comment / 是否爬取二级评论, supported values case insensitive / 支持的值(不区分大小写) ('yes', 'true', 't', 'y', '1', 'no', 'false', 'f', 'n', '0')''', default=config.ENABLE_GET_SUB_COMMENTS)
     parser.add_argument('--save_data_option', type=str,
-                        help='Where to save the data / 数据保存方式 (csv=CSV文件 | db=MySQL数据库 | json=JSON文件 | sqlite=SQLite数据库)', 
-                        choices=['csv', 'db', 'json', 'sqlite'], default=config.SAVE_DATA_OPTION)
+                        help='Where to save the data / 数据保存方式 (csv=CSV文件 | db=MySQL数据库 | json=JSON文件 | sqlite=SQLite数据库 | postgresql=PostgreSQL数据库)',
+                        choices=['csv', 'db', 'json', 'sqlite', 'postgresql'], default=config.SAVE_DATA_OPTION)
     parser.add_argument('--init_db', type=str,
-                        help='Initialize database schema / 初始化数据库表结构 (sqlite | mysql)',
-                        choices=['sqlite', 'mysql'], default=None)
+                        help='Initialize database schema / 初始化数据库表结构 (sqlite | mysql | postgresql)',
+                        choices=['sqlite', 'mysql', 'postgresql'], default=None)
     parser.add_argument('--cookies', type=str,
                         help='Cookies used for cookie login type / Cookie登录方式使用的Cookie值', default=config.COOKIES)
 

@@ -11,6 +11,7 @@ dependencies = [
     "aiosqlite>=0.21.0",
     "alembic>=1.16.5",
     "asyncmy>=0.2.10",
+    "asyncpg==0.29.0",
     "cryptography>=45.0.7",
     "fastapi==0.110.2",
     "httpx==0.28.1",
@@ -36,3 +37,8 @@ dependencies = [
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+[dependency-groups]
+dev = [
+    "opencv-python>=4.11.0.86",
+]

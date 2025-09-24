@@ -27,6 +27,7 @@ class DouyinStoreFactory:
         "db": DouyinDbStoreImplement,
         "json": DouyinJsonStoreImplement,
         "sqlite": DouyinSqliteStoreImplement,
+        "postgresql": DouyinDbStoreImplement,
     }
 
     @staticmethod
