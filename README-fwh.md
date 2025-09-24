@@ -174,6 +174,39 @@ python main.py --platform xhs --lt cookie --type creator
 python main.py --help
 ```
 
+### 使用示例：
+```shell
+# 初始化 SQLite 数据库（使用'--init_db'时不需要携带其他optional）
+uv run main.py --init_db sqlite
+# 使用 SQLite 存储数据（推荐个人用户使用）
+uv run main.py --platform xhs --lt qrcode --type search --save_data_option sqlite
+```
+```shell
+# 初始化 MySQL 数据库
+uv run main.py --init_db mysql
+# 使用 MySQL 存储数据（为适配历史更新，db参数进行沿用）
+uv run main.py --platform xhs --lt qrcode --type search --save_data_option db
+```
+```shell
+
+# 安装浏览器驱动
+uv run playwright install
+
+# 项目默认是没有开启评论爬取模式，如需评论请在 config/base_config.py 中的 ENABLE_GET_COMMENTS 变量修改
+# 一些其他支持项，也可以在 config/base_config.py 查看功能，写的有中文注释
+
+# 从配置文件中读取关键词搜索相关的帖子并爬取帖子信息与评论
+uv run main.py --platform xhs --lt qrcode --type search
+
+# 从配置文件中读取指定的帖子ID列表获取指定帖子的信息与评论信息
+uv run main.py --platform xhs --lt qrcode --type detail
+
+# 打开对应APP扫二维码登录
+
+# 其他平台爬虫使用示例，执行下面的命令查看
+uv run main.py --help
+```
+
 ### 命令行参数说明
 
 | 参数 | 选项 | 说明 |
