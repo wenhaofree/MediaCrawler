@@ -45,12 +45,14 @@ SAVE_LOGIN_STATE = True
 
 # ==================== CDP (Chrome DevTools Protocol) Configuration ====================
 # Whether to enable CDP mode - use the user's existing Chrome/Edge browser to crawl, providing better anti-detection capabilities
-# Once enabled, the user's Chrome/Edge browser will be automatically detected and started, and controlled through the CDP protocol.
+# Once enabled, the program will first try to attach directly to an existing browser already listening on CDP_DEBUG_PORT.
+# Only when no existing CDP browser is found will it automatically detect Chrome/Edge and start a new browser.
 # This method uses the real browser environment, including the user's extensions, cookies and settings, greatly reducing the risk of detection.
 ENABLE_CDP_MODE = True
 
 # CDP debug port, used to communicate with the browser
-# If the port is occupied, the system will automatically try the next available port
+# If an existing CDP browser is already listening on this port, it will be reused directly.
+# If the port is occupied by a non-CDP process, the system will automatically try the next available port for a new browser.
 CDP_DEBUG_PORT = 9222
 
 # Custom browser path (optional)
@@ -67,14 +69,15 @@ CDP_HEADLESS = False
 BROWSER_LAUNCH_TIMEOUT = 60
 
 # Whether to automatically close the browser when the program ends
-# Set to False to keep the browser running for easy debugging
+# Only affects browser processes started by MediaCrawler itself.
+# If MediaCrawler is attached to your already-open browser, that browser will not be closed.
 AUTO_CLOSE_BROWSER = True
 
 # Data saving type option configuration, supports: csv, db, json, jsonl, sqlite, excel, postgres. It is best to save to DB, with deduplication function.
-SAVE_DATA_OPTION = "jsonl"  # csv or db or json or jsonl or sqlite or excel or postgres
+SAVE_DATA_OPTION = "sqlite"  # csv or db or json or jsonl or sqlite or excel or postgres
 
 # Data saving path, if not specified by default, it will be saved to the data folder.
-SAVE_DATA_PATH = ""
+SAVE_DATA_PATH = "/Users/wenhao/fuwenhao/temp/demo-mediacrawler/data/"
 
 # Browser file configuration cached by the user's browser
 USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name

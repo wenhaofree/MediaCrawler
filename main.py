@@ -119,6 +119,14 @@ async def main() -> None:
 async def async_cleanup() -> None:
     global crawler
     if crawler:
+        if getattr(crawler, "context_page", None):
+            try:
+                await crawler.context_page.close()
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "closed" not in error_msg and "disconnected" not in error_msg:
+                    print(f"[Main] Error closing browser page: {e}")
+
         if getattr(crawler, "cdp_manager", None):
             try:
                 await crawler.cdp_manager.cleanup(force=True)
