@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQLite 数据浏览器</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/sqlite-viewer/static/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero__eyebrow">MediaCrawler SQLite Viewer</div>
+      <h1>跨平台 SQLite 数据浏览页</h1>
+      <p>聚焦小红书、抖音、Bilibili、微博、知乎，支持内容、评论、创作者的统一列表查看。</p>
+    </header>
+
+    <main class="layout">
+      <section class="control-panel">
+        <div class="control-panel__row">
+          <label class="field">
+            <span>平台</span>
+            <select id="platform-select"></select>
+          </label>
+
+          <label class="field">
+            <span>数据类型</span>
+            <select id="entity-type-select"></select>
+          </label>
+
+          <label class="field">
+            <span>时间筛选</span>
+            <select id="time-filter-select">
+              <option value="all">全部时间</option>
+              <option value="today">当日</option>
+              <option value="week">一周内</option>
+              <option value="custom">自定义时间段</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="time-filter-hint" class="field-hint">按发布时间筛选当前列表。</div>
+
+        <div id="custom-date-range" class="date-range hidden">
+          <label class="field">
+            <span>开始日期</span>
+            <input id="start-date-input" type="date">
+          </label>
+
+          <label class="field">
+            <span>结束日期</span>
+            <input id="end-date-input" type="date">
+          </label>
+        </div>
+
+        <div id="summary-bar" class="summary-bar"></div>
+      </section>
+
+      <section class="content-panel">
+        <div class="toolbar">
+          <div class="toolbar__meta">
+            <span id="result-meta">加载中...</span>
+          </div>
+          <div class="toolbar__actions">
+            <button id="refresh-button" class="button button--ghost" type="button">刷新</button>
+          </div>
+        </div>
+
+        <div id="loading-state" class="state state--loading">正在读取 SQLite 数据...</div>
+        <div id="error-state" class="state state--error hidden"></div>
+        <div id="empty-state" class="state hidden">当前筛选条件下没有数据。</div>
+
+        <div id="record-list" class="record-list"></div>
+
+        <div class="pagination">
+          <button id="prev-button" class="button" type="button">上一页</button>
+          <span id="pagination-meta"></span>
+          <button id="next-button" class="button" type="button">下一页</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <aside id="detail-drawer" class="detail-drawer hidden" aria-hidden="true">
+    <div class="detail-drawer__backdrop" id="drawer-backdrop"></div>
+    <div class="detail-drawer__panel">
+      <div class="detail-drawer__header">
+        <div>
+          <div id="detail-kicker" class="detail-kicker"></div>
+          <h2 id="detail-title">详情</h2>
+        </div>
+        <button id="drawer-close" class="button button--ghost" type="button">关闭</button>
+      </div>
+
+      <div id="detail-meta" class="detail-meta"></div>
+
+      <section class="detail-section">
+        <h3>原始字段</h3>
+        <pre id="detail-json" class="detail-json"></pre>
+      </section>
+    </div>
+  </aside>
+
+  <script src="/sqlite-viewer/static/app.js"></script>
+</body>
+</html>

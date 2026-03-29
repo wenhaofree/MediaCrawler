@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .routers import crawler_router, data_router, websocket_router
+from .sqlite_viewer import sqlite_viewer_router
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
@@ -40,6 +41,7 @@ app = FastAPI(
 
 # Get webui static files directory
 WEBUI_DIR = os.path.join(os.path.dirname(__file__), "webui")
+SQLITE_VIEWER_STATIC_DIR = os.path.join(os.path.dirname(__file__), "sqlite_viewer", "static")
 
 # CORS configuration - allow frontend dev server access
 app.add_middleware(
@@ -59,6 +61,7 @@ app.add_middleware(
 app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
+app.include_router(sqlite_viewer_router)
 
 
 @app.get("/")
@@ -181,6 +184,13 @@ if os.path.exists(WEBUI_DIR):
         app.mount("/logos", StaticFiles(directory=logos_dir), name="logos")
     # Mount other static files (e.g., vite.svg)
     app.mount("/static", StaticFiles(directory=WEBUI_DIR), name="webui-static")
+
+if os.path.exists(SQLITE_VIEWER_STATIC_DIR):
+    app.mount(
+        "/sqlite-viewer/static",
+        StaticFiles(directory=SQLITE_VIEWER_STATIC_DIR),
+        name="sqlite-viewer-static",
+    )
 
 
 if __name__ == "__main__":
