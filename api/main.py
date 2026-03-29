@@ -32,6 +32,8 @@ from fastapi.responses import FileResponse
 
 from .routers import crawler_router, data_router, websocket_router
 from .sqlite_viewer import sqlite_viewer_router
+from .scheduled_tasks import scheduled_tasks_router
+from .scheduled_tasks.service import scheduled_task_service
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
@@ -42,6 +44,7 @@ app = FastAPI(
 # Get webui static files directory
 WEBUI_DIR = os.path.join(os.path.dirname(__file__), "webui")
 SQLITE_VIEWER_STATIC_DIR = os.path.join(os.path.dirname(__file__), "sqlite_viewer", "static")
+SCHEDULED_TASKS_STATIC_DIR = os.path.join(os.path.dirname(__file__), "scheduled_tasks", "static")
 
 # CORS configuration - allow frontend dev server access
 app.add_middleware(
@@ -62,6 +65,17 @@ app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
 app.include_router(sqlite_viewer_router)
+app.include_router(scheduled_tasks_router)
+
+
+@app.on_event("startup")
+async def startup_scheduled_tasks() -> None:
+    await scheduled_task_service.start()
+
+
+@app.on_event("shutdown")
+async def shutdown_scheduled_tasks() -> None:
+    await scheduled_task_service.shutdown()
 
 
 @app.get("/")
@@ -190,6 +204,13 @@ if os.path.exists(SQLITE_VIEWER_STATIC_DIR):
         "/sqlite-viewer/static",
         StaticFiles(directory=SQLITE_VIEWER_STATIC_DIR),
         name="sqlite-viewer-static",
+    )
+
+if os.path.exists(SCHEDULED_TASKS_STATIC_DIR):
+    app.mount(
+        "/schedule-tasks/static",
+        StaticFiles(directory=SCHEDULED_TASKS_STATIC_DIR),
+        name="schedule-tasks-static",
     )
 
 

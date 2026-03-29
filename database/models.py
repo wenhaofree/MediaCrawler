@@ -450,3 +450,68 @@ class ZhihuCreator(Base):
     get_voteup_count = Column(Integer, default=0, comment='获赞数')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
+
+
+class ScheduledCrawlTask(Base):
+    __tablename__ = 'scheduled_crawl_task'
+    id = Column(Integer, primary_key=True, comment='主键ID')
+    name = Column(Text, nullable=False, comment='任务名称')
+    platform = Column(String(32), nullable=False, index=True, comment='平台')
+    run_time = Column(String(8), nullable=False, comment='每日执行时间 HH:MM')
+    max_pages = Column(Integer, nullable=False, default=3, comment='每个作者的最大采集页数')
+    enable_comments = Column(Integer, nullable=False, default=0, comment='是否采集评论')
+    enable_sub_comments = Column(Integer, nullable=False, default=0, comment='是否采集二级评论')
+    save_option = Column(String(32), nullable=False, default='sqlite', comment='保存方式')
+    status = Column(String(16), nullable=False, default='active', index=True, comment='任务状态')
+    last_run_at = Column(Text, comment='最近执行时间')
+    last_success_at = Column(Text, comment='最近成功时间')
+    last_error = Column(Text, comment='最近错误')
+    next_run_at = Column(Text, comment='下次执行时间')
+    created_at = Column(Text, nullable=False, comment='创建时间')
+    updated_at = Column(Text, nullable=False, comment='更新时间')
+
+
+class ScheduledCrawlTaskCreator(Base):
+    __tablename__ = 'scheduled_crawl_task_creator'
+    id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(Integer, nullable=False, index=True, comment='任务ID')
+    sort_order = Column(Integer, nullable=False, default=0, comment='排序')
+    raw_input = Column(Text, nullable=False, comment='原始作者输入')
+    normalized_creator_id = Column(Text, nullable=False, comment='标准化作者ID')
+    display_name = Column(Text, comment='显示名称')
+    xhs_user_id = Column(Text, comment='小红书用户ID')
+    xhs_xsec_token = Column(Text, comment='小红书最近成功token')
+    xhs_xsec_source = Column(Text, comment='小红书最近成功source')
+    last_success_at = Column(Text, comment='最近成功时间')
+    last_error = Column(Text, comment='最近错误')
+    created_at = Column(Text, nullable=False, comment='创建时间')
+    updated_at = Column(Text, nullable=False, comment='更新时间')
+
+
+class ScheduledCrawlRun(Base):
+    __tablename__ = 'scheduled_crawl_run'
+    id = Column(Integer, primary_key=True, comment='主键ID')
+    task_id = Column(Integer, nullable=False, index=True, comment='任务ID')
+    status = Column(String(16), nullable=False, index=True, comment='执行状态')
+    trigger_type = Column(String(16), nullable=False, default='schedule', comment='触发方式')
+    started_at = Column(Text, nullable=False, comment='开始时间')
+    finished_at = Column(Text, comment='结束时间')
+    error_message = Column(Text, comment='错误信息')
+    created_at = Column(Text, nullable=False, comment='创建时间')
+
+
+class ScheduledCrawlRunItem(Base):
+    __tablename__ = 'scheduled_crawl_run_item'
+    id = Column(Integer, primary_key=True, comment='主键ID')
+    run_id = Column(Integer, nullable=False, index=True, comment='运行ID')
+    task_id = Column(Integer, nullable=False, index=True, comment='任务ID')
+    creator_id = Column(Integer, nullable=False, index=True, comment='作者配置ID')
+    raw_input = Column(Text, nullable=False, comment='原始作者输入')
+    normalized_creator_id = Column(Text, nullable=False, comment='标准化作者ID')
+    status = Column(String(16), nullable=False, index=True, comment='执行状态')
+    started_at = Column(Text, nullable=False, comment='开始时间')
+    finished_at = Column(Text, comment='结束时间')
+    pages_fetched = Column(Integer, default=0, comment='采集页数')
+    items_fetched = Column(Integer, default=0, comment='新增条数')
+    error_message = Column(Text, comment='错误信息')
+    effective_creator_arg = Column(Text, comment='实际命令中的 creator_id 参数')

@@ -628,7 +628,12 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         result = []
         notes_has_more = True
         notes_cursor = ""
-        while notes_has_more and len(result) < config.CRAWLER_MAX_NOTES_COUNT:
+        page_count = 0
+        while (
+            notes_has_more
+            and len(result) < config.CRAWLER_MAX_NOTES_COUNT
+            and (config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES)
+        ):
             try:
                 notes_res = await self.get_notes_by_creator(
                     user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
@@ -653,6 +658,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
 
             notes_has_more = notes_res.get("has_more", False)
             notes_cursor = notes_res.get("cursor", "")
+            page_count += 1
             if "notes" not in notes_res:
                 utils.logger.info(
                     f"[XiaoHongShuClient.get_all_notes_by_creator] No 'notes' key found in response: {notes_res}"

@@ -474,7 +474,10 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         is_end: bool = False
         offset: int = 0
         limit: int = 20
-        while not is_end:
+        page_count = 0
+        while not is_end and (
+            config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES
+        ):
             res = await self.get_creator_answers(creator.url_token, offset, limit)
             if not res:
                 break
@@ -482,6 +485,7 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
             paging_info = res.get("paging", {})
             is_end = paging_info.get("is_end")
             contents = self._extractor.extract_content_list_from_creator(res.get("data"))
+            page_count += 1
             if callback:
                 await callback(contents)
             all_contents.extend(contents)
@@ -509,13 +513,17 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         is_end: bool = False
         offset: int = 0
         limit: int = 20
-        while not is_end:
+        page_count = 0
+        while not is_end and (
+            config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES
+        ):
             res = await self.get_creator_articles(creator.url_token, offset, limit)
             if not res:
                 break
             paging_info = res.get("paging", {})
             is_end = paging_info.get("is_end")
             contents = self._extractor.extract_content_list_from_creator(res.get("data"))
+            page_count += 1
             if callback:
                 await callback(contents)
             all_contents.extend(contents)
@@ -543,13 +551,17 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         is_end: bool = False
         offset: int = 0
         limit: int = 20
-        while not is_end:
+        page_count = 0
+        while not is_end and (
+            config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES
+        ):
             res = await self.get_creator_videos(creator.url_token, offset, limit)
             if not res:
                 break
             paging_info = res.get("paging", {})
             is_end = paging_info.get("is_end")
             contents = self._extractor.extract_content_list_from_creator(res.get("data"))
+            page_count += 1
             if callback:
                 await callback(contents)
             all_contents.extend(contents)

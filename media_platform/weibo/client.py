@@ -391,7 +391,10 @@ class WeiboClient(ProxyRefreshMixin):
         notes_has_more = True
         since_id = ""
         crawler_total_count = 0
-        while notes_has_more:
+        page_count = 0
+        while notes_has_more and (
+            config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES
+        ):
             notes_res = await self.get_notes_by_creator(creator_id, container_id, since_id)
             if not notes_res:
                 utils.logger.error(f"[WeiboClient.get_notes_by_creator] The current creator may have been banned by Weibo, so they cannot access the data.")
@@ -402,6 +405,7 @@ class WeiboClient(ProxyRefreshMixin):
                 break
 
             notes = notes_res["cards"]
+            page_count += 1
             utils.logger.info(f"[WeiboClient.get_all_notes_by_creator] got user_id:{creator_id} notes len : {len(notes)}")
             notes = [note for note in notes if note.get("card_type") == 9]
             if callback:

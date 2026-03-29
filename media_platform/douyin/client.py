@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
 import httpx
 from playwright.async_api import BrowserContext
 
+import config
 from base.base_crawler import AbstractApiClient
 from proxy.proxy_mixin import ProxyRefreshMixin
 from tools import utils
@@ -322,11 +323,15 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         posts_has_more = 1
         max_cursor = ""
         result = []
-        while posts_has_more == 1:
+        page_count = 0
+        while posts_has_more == 1 and (
+            config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES
+        ):
             aweme_post_res = await self.get_user_aweme_posts(sec_user_id, max_cursor)
             posts_has_more = aweme_post_res.get("has_more", 0)
             max_cursor = aweme_post_res.get("max_cursor")
             aweme_list = aweme_post_res.get("aweme_list") if aweme_post_res.get("aweme_list") else []
+            page_count += 1
             utils.logger.info(f"[DouYinClient.get_all_user_aweme_posts] get sec_user_id:{sec_user_id} video len : {len(aweme_list)}")
             if callback:
                 await callback(aweme_list)

@@ -71,6 +71,8 @@ class CrawlerStartRequest(BaseModel):
     save_option: SaveDataOptionEnum = SaveDataOptionEnum.JSONL
     cookies: str = ""
     headless: bool = False
+    max_pages: int = 0
+    cdp_attach_only: bool = False
 
 
 class CrawlerStatusResponse(BaseModel):

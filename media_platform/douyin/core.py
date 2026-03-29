@@ -92,6 +92,10 @@ class DouYinCrawler(AbstractCrawler):
 
             self.dy_client = await self.create_douyin_client(httpx_proxy_format)
             if not await self.dy_client.pong(browser_context=self.browser_context):
+                if config.CDP_ATTACH_ONLY:
+                    raise RuntimeError(
+                        "Douyin is not logged in on the attached 9222 browser, and attach-only mode forbids QR login."
+                    )
                 login_obj = DouYinLogin(
                     login_type=config.LOGIN_TYPE,
                     login_phone="",  # you phone number

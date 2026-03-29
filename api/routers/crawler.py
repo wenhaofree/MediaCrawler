@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..schemas import CrawlerStartRequest, CrawlerStatusResponse
 from ..services import crawler_manager
+from ..scheduled_tasks.service import scheduled_task_service
 
 router = APIRouter(prefix="/crawler", tags=["crawler"])
 
@@ -27,6 +28,11 @@ router = APIRouter(prefix="/crawler", tags=["crawler"])
 @router.post("/start")
 async def start_crawler(request: CrawlerStartRequest):
     """Start crawler task"""
+    if scheduled_task_service.is_busy():
+        raise HTTPException(
+            status_code=409,
+            detail="Scheduled crawler queue is busy, manual start is temporarily unavailable",
+        )
     success = await crawler_manager.start(request)
     if not success:
         # Handle concurrent/duplicate requests: if process is already running, return 400 instead of 500

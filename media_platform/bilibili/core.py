@@ -97,6 +97,10 @@ class BilibiliCrawler(AbstractCrawler):
             # Create a client to interact with the xiaohongshu website.
             self.bili_client = await self.create_bilibili_client(httpx_proxy_format)
             if not await self.bili_client.pong():
+                if config.CDP_ATTACH_ONLY:
+                    raise RuntimeError(
+                        "Bilibili is not logged in on the attached 9222 browser, and attach-only mode forbids QR login."
+                    )
                 login_obj = BilibiliLogin(
                     login_type=config.LOGIN_TYPE,
                     login_phone="",  # your phone number
@@ -388,6 +392,11 @@ class BilibiliCrawler(AbstractCrawler):
         ps = 30
         pn = 1
         while True:
+            if config.CRAWLER_MAX_PAGES > 0 and pn > config.CRAWLER_MAX_PAGES:
+                utils.logger.info(
+                    f"[BilibiliCrawler.get_creator_videos] Reached max creator pages limit: {config.CRAWLER_MAX_PAGES}"
+                )
+                break
             result = await self.bili_client.get_creator_videos(creator_id, pn, ps)
             video_bvids_list = [video["bvid"] for video in result["list"]["vlist"]]
             await self.get_specified_videos(video_bvids_list)

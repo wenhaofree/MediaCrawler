@@ -267,6 +267,14 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Performance Configuration",
             ),
         ] = config.MAX_CONCURRENCY_NUM,
+        max_pages: Annotated[
+            int,
+            typer.Option(
+                "--max_pages",
+                help="Maximum pages to crawl in creator mode (0 means unlimited)",
+                rich_help_panel="Performance Configuration",
+            ),
+        ] = config.CRAWLER_MAX_PAGES,
         save_data_path: Annotated[
             str,
             typer.Option(
@@ -300,6 +308,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Proxy Configuration",
             ),
         ] = config.IP_PROXY_PROVIDER_NAME,
+        cdp_attach_only: Annotated[
+            str,
+            typer.Option(
+                "--cdp_attach_only",
+                help="Whether to require attaching to an existing CDP browser instead of launching a new one, supports yes/true/t/y/1 or no/false/f/n/0",
+                rich_help_panel="Runtime Configuration",
+                show_default=True,
+            ),
+        ] = str(config.CDP_ATTACH_ONLY),
     ) -> SimpleNamespace:
         """MediaCrawler 命令行入口"""
 
@@ -307,6 +324,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         enable_sub_comment = _to_bool(get_sub_comment)
         enable_headless = _to_bool(headless)
         enable_ip_proxy_value = _to_bool(enable_ip_proxy)
+        enable_cdp_attach_only = _to_bool(cdp_attach_only)
         init_db_value = init_db.value if init_db else None
 
         # Parse specified_id and creator_id into lists
@@ -327,10 +345,12 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.COOKIES = cookies
         config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = max_comments_count_singlenotes
         config.MAX_CONCURRENCY_NUM = max_concurrency_num
+        config.CRAWLER_MAX_PAGES = max_pages
         config.SAVE_DATA_PATH = save_data_path
         config.ENABLE_IP_PROXY = enable_ip_proxy_value
         config.IP_PROXY_POOL_COUNT = ip_proxy_pool_count
         config.IP_PROXY_PROVIDER_NAME = ip_proxy_provider_name
+        config.CDP_ATTACH_ONLY = enable_cdp_attach_only
 
         # Set platform-specific ID lists for detail/creator mode
         if specified_id_list:
@@ -371,6 +391,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             cookies=config.COOKIES,
             specified_id=specified_id,
             creator_id=creator_id,
+            max_pages=config.CRAWLER_MAX_PAGES,
+            cdp_attach_only=config.CDP_ATTACH_ONLY,
         )
 
     command = typer.main.get_command(app)

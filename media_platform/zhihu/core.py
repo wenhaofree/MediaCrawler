@@ -117,6 +117,10 @@ class ZhihuCrawler(AbstractCrawler):
                         "[ZhihuCrawler.start] Zhihu cookies already show a logged-in browser, skip explicit login flow ..."
                     )
                 else:
+                    if config.CDP_ATTACH_ONLY:
+                        raise RuntimeError(
+                            "Zhihu is not logged in on the attached 9222 browser, and attach-only mode forbids QR login."
+                        )
                     await login_obj.begin()
                 await self.zhihu_client.update_cookies(
                     browser_context=self.browser_context

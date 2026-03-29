@@ -100,6 +100,10 @@ class WeiboCrawler(AbstractCrawler):
             # Create a client to interact with the xiaohongshu website.
             self.wb_client = await self.create_weibo_client(httpx_proxy_format)
             if not await self.wb_client.pong():
+                if config.CDP_ATTACH_ONLY:
+                    raise RuntimeError(
+                        "Weibo is not logged in on the attached 9222 browser, and attach-only mode forbids QR login."
+                    )
                 login_obj = WeiboLogin(
                     login_type=config.LOGIN_TYPE,
                     login_phone="",  # your phone number

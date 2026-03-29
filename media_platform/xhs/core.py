@@ -110,6 +110,10 @@ class XiaoHongShuCrawler(AbstractCrawler):
                         "[XiaoHongShuCrawler.start] Xhs page already shows logged-in UI, skip explicit login flow ..."
                     )
                 else:
+                    if config.CDP_ATTACH_ONLY:
+                        raise RuntimeError(
+                            "Xiaohongshu is not logged in on the attached 9222 browser, and attach-only mode forbids QR login."
+                        )
                     await login_obj.begin()
                 await self.xhs_client.update_cookies(browser_context=self.browser_context)
 

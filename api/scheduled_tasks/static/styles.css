@@ -1,0 +1,382 @@
+:root {
+  --bg: #eff3eb;
+  --panel: rgba(255, 255, 250, 0.92);
+  --panel-strong: #fffefb;
+  --ink: #1d221d;
+  --muted: #5f6b60;
+  --line: rgba(29, 34, 29, 0.12);
+  --accent: #2d6a4f;
+  --accent-dark: #1f4e39;
+  --accent-soft: rgba(45, 106, 79, 0.12);
+  --warning: #a75522;
+  --shadow: 0 18px 40px rgba(32, 42, 35, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  background:
+    radial-gradient(circle at top right, rgba(45, 106, 79, 0.12), transparent 26%),
+    linear-gradient(180deg, #f7faf4 0%, #edf3ec 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.page-shell {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 36px 20px 60px;
+}
+
+.hero {
+  padding: 20px 0 30px;
+}
+
+.hero__eyebrow,
+.panel-eyebrow {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-dark);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 14px 0 10px;
+  font-size: clamp(34px, 5vw, 58px);
+  line-height: 0.96;
+}
+
+.hero p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 24px;
+}
+
+.form-panel,
+.list-panel,
+.history-panel {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+
+.form-panel {
+  position: sticky;
+  top: 16px;
+  height: fit-content;
+}
+
+.list-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panel-title-row--compact {
+  margin-bottom: 10px;
+}
+
+.panel-title-row h2,
+.panel-title-row h3 {
+  margin: 10px 0 0;
+}
+
+.task-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel-strong);
+  color: var(--ink);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 220px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.field-hint code {
+  font-family: "JetBrains Mono", monospace;
+}
+
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(45, 106, 79, 0.28);
+}
+
+.button--primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+}
+
+.button--ghost {
+  background: transparent;
+}
+
+.button--warning {
+  color: var(--warning);
+}
+
+.cdp-status,
+.busy-status,
+.state {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.cdp-status.ok {
+  color: var(--accent-dark);
+  border-color: rgba(45, 106, 79, 0.25);
+  background: rgba(45, 106, 79, 0.08);
+}
+
+.cdp-status.error,
+.state--error {
+  color: #8a3119;
+  border-color: rgba(165, 85, 34, 0.28);
+  background: rgba(165, 85, 34, 0.08);
+}
+
+.task-list {
+  display: grid;
+  gap: 14px;
+}
+
+.task-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+}
+
+.task-card.active {
+  border-color: rgba(45, 106, 79, 0.24);
+}
+
+.task-card__head,
+.task-card__meta,
+.task-card__actions,
+.run-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.task-card__head {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.task-card__title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.task-card__subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(45, 106, 79, 0.1);
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip.muted {
+  background: rgba(29, 34, 29, 0.08);
+  color: var(--muted);
+}
+
+.creator-list {
+  display: grid;
+  gap: 8px;
+}
+
+.creator-row {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #f6f8f3;
+}
+
+.creator-row__title {
+  font-weight: 600;
+}
+
+.creator-row__sub {
+  color: var(--muted);
+  font-size: 13px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.history-panel {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.run-history {
+  display: grid;
+  gap: 14px;
+}
+
+.run-history.empty {
+  color: var(--muted);
+}
+
+.run-card {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.run-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.run-item-list {
+  display: grid;
+  gap: 10px;
+}
+
+.run-item {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f7faf5;
+}
+
+.run-item__title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+@media (max-width: 1080px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .form-panel {
+    position: static;
+  }
+}

@@ -103,13 +103,21 @@ class CDPBrowserManager:
         playwright_proxy: Optional[Dict] = None,
         user_agent: Optional[str] = None,
         headless: bool = False,
+        attach_only: Optional[bool] = None,
     ) -> BrowserContext:
         """
         Launch browser and connect via CDP
         """
         try:
+            require_attach_only = (
+                config.CDP_ATTACH_ONLY if attach_only is None else attach_only
+            )
             # 1. Reuse the user's existing CDP browser first.
             if not await self._attach_to_existing_browser(playwright):
+                if require_attach_only:
+                    raise RuntimeError(
+                        f"CDP attach-only mode is enabled, but no reusable browser is available on port {config.CDP_DEBUG_PORT}"
+                    )
                 # 2. If there is no existing CDP browser, launch one ourselves.
                 browser_path = await self._get_browser_path()
                 self.debug_port = self.launcher.find_available_port(config.CDP_DEBUG_PORT)

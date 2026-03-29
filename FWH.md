@@ -69,6 +69,10 @@ uv run uvicorn api.main:app --port 8080 --reload
 
 👉 [http://127.0.0.1:8080/sqlite-viewer](http://127.0.0.1:8080/sqlite-viewer)
 
+### 定时任务配置：
+- 前提是打开9222浏览器端口，并登录对应平台账号
+http://127.0.0.1:8080/schedule-tasks
+
 
 
 ## 5. 采集列表统计：
@@ -92,4 +96,6 @@ uv run uvicorn api.main:app --port 8080 --reload
 1. 微博限制查询条数
 2. 抖音查询过程中失败；
 3. 小红书采集数据中途失败；
-4. B站++知乎OK
+4. 知乎限制条数；
+5. B站+知乎OK
+6. 定时任务的采集抖音作品没有成功，作者信息采集入库了
