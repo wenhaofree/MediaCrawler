@@ -287,6 +287,42 @@ def test_sqlite_viewer_list_orders_all_creators_by_last_modify_ts_desc(tmp_path,
     assert payload["items"][0]["author_name"] == "抖音作者"
 
 
+def test_sqlite_viewer_filters_records_by_author_query(tmp_path, monkeypatch):
+    db_path = tmp_path / "viewer.db"
+    _prepare_sqlite_db(db_path)
+    monkeypatch.setattr(db_config, "SQLITE_DB_PATH", str(db_path))
+
+    client = TestClient(app)
+    response = client.get(
+        "/api/sqlite-viewer/list",
+        params={"platform": "dy", "entity_type": "content", "author_query": "创作者 B"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["author_query"] == "创作者 B"
+    assert payload["total"] == 1
+    assert [item["source_id"] for item in payload["items"]] == ["10002"]
+
+
+def test_sqlite_viewer_filters_creators_by_author_query(tmp_path, monkeypatch):
+    db_path = tmp_path / "viewer.db"
+    _prepare_sqlite_db(db_path)
+    monkeypatch.setattr(db_config, "SQLITE_DB_PATH", str(db_path))
+
+    client = TestClient(app)
+    response = client.get(
+        "/api/sqlite-viewer/list",
+        params={"platform": "all", "entity_type": "creator", "author_query": "微博"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["author_query"] == "微博"
+    assert payload["total"] == 1
+    assert [item["platform"] for item in payload["items"]] == ["wb"]
+
+
 def test_sqlite_viewer_filters_today_records_by_publish_time(tmp_path, monkeypatch):
     db_path = tmp_path / "viewer.db"
     _prepare_sqlite_db(db_path)

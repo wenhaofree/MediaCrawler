@@ -21,6 +21,9 @@ open -na "Google Chrome" --args \
 
 # 可选值: "csv", "db", "json", "jsonl", "sqlite", "excel", "postgres"
 SAVE_DATA_OPTION = "sqlite"  
+
+# 关闭评论采集
+ENABLE_GET_COMMENTS = False
 ```
 
 ---
@@ -29,7 +32,19 @@ SAVE_DATA_OPTION = "sqlite"
 使用 `uv` 运行爬虫脚本。以下示例演示了如何根据 `creator_id` 爬取抖音平台的数据：
 
 ```bash
+# 临时关闭代理的方式
+NO_PROXY=.douyin.com,douyin.com,www.douyin.com uv run main.py --platform dy --lt qrcode --type creator --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"
+
+# 直接使用：
 uv run main.py --platform dy --lt qrcode --type creator --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"
+
+uv run main.py --platform bili --lt qrcode --type creator --creator_id "625267185"
+
+uv run main.py --platform xhs --lt qrcode --type creator --creator_id "https://www.xiaohongshu.com/user/profile/640c29eb000000001001c91b?xsec_token=ABhC5chjrgmTjNDSBeeLLNtrpvHHHA3Zz8u3s5duXIRO0%3D"
+
+
+uv run main.py --platform wb --lt qrcode --type creator --creator_id "5648162302"
+
 ```
 
 **参数说明：**
@@ -52,3 +67,15 @@ uv run uvicorn api.main:app --port 8080 --reload
 服务启动后，请在浏览器中访问以下地址进入 **SQLite 数据查看器**：
 
 👉 [http://127.0.0.1:8080/sqlite-viewer](http://127.0.0.1:8080/sqlite-viewer)
+
+
+
+## 5. 采集列表统计：
+1. 抖音：
+    - 赛文乔伊：MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk
+2. B站：
+    - 零度博客：625267185
+3. 小红书：
+    - 
+4. 知乎：
+    - 

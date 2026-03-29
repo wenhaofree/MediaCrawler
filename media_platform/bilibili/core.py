@@ -334,7 +334,12 @@ class BilibiliCrawler(AbstractCrawler):
         for video_id in video_id_list:
             task = asyncio.create_task(self.get_comments(video_id, semaphore), name=video_id)
             task_list.append(task)
-        await asyncio.gather(*task_list)
+        results = await asyncio.gather(*task_list, return_exceptions=True)
+        for video_id, result in zip(video_id_list, results):
+            if isinstance(result, Exception):
+                utils.logger.error(
+                    f"[BilibiliCrawler.batch_get_video_comments] Unexpected error for video_id: {video_id}, err: {result}"
+                )
 
     async def get_comments(self, video_id: str, semaphore: asyncio.Semaphore):
         """
@@ -347,7 +352,9 @@ class BilibiliCrawler(AbstractCrawler):
             try:
                 utils.logger.info(f"[BilibiliCrawler.get_comments] begin get video_id: {video_id} comments ...")
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                utils.logger.info(f"[BilibiliCrawler.get_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after fetching comments for video {video_id}")
+                utils.logger.info(
+                    f"[BilibiliCrawler.get_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds before fetching comments for video {video_id}"
+                )
                 await self.bili_client.get_video_all_comments(
                     video_id=video_id,
                     crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
@@ -358,10 +365,20 @@ class BilibiliCrawler(AbstractCrawler):
 
             except DataFetchError as ex:
                 utils.logger.error(f"[BilibiliCrawler.get_comments] get video_id: {video_id} comment error: {ex}")
+            except TargetClosedError as ex:
+                utils.logger.warning(
+                    f"[BilibiliCrawler.get_comments] Playwright page was closed while fetching comments for video_id: {video_id}, skip this video. err: {ex}"
+                )
             except Exception as e:
-                utils.logger.error(f"[BilibiliCrawler.get_comments] may be been blocked, err:{e}")
-                # Propagate the exception to be caught by the main loop
-                raise
+                error_msg = str(e).lower()
+                if "target page, context or browser has been closed" in error_msg or "has been closed" in error_msg:
+                    utils.logger.warning(
+                        f"[BilibiliCrawler.get_comments] Playwright page/context/browser was closed while fetching comments for video_id: {video_id}, skip this video. err: {e}"
+                    )
+                    return
+                utils.logger.exception(
+                    f"[BilibiliCrawler.get_comments] unexpected error while fetching comments for video_id: {video_id}"
+                )
 
     async def get_creator_videos(self, creator_id: int):
         """
@@ -399,9 +416,14 @@ class BilibiliCrawler(AbstractCrawler):
 
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_video_info_task(aid=0, bvid=video_id, semaphore=semaphore) for video_id in bvids_list]
-        video_details = await asyncio.gather(*task_list)
+        video_details = await asyncio.gather(*task_list, return_exceptions=True)
         video_aids_list = []
-        for video_detail in video_details:
+        for video_id, video_detail in zip(bvids_list, video_details):
+            if isinstance(video_detail, Exception):
+                utils.logger.error(
+                    f"[BilibiliCrawler.get_specified_videos] Unexpected error while fetching video detail for {video_id}: {video_detail}"
+                )
+                continue
             if video_detail is not None:
                 video_item_view: Dict = video_detail.get("View")
                 video_aid: str = video_item_view.get("aid")
@@ -434,6 +456,11 @@ class BilibiliCrawler(AbstractCrawler):
                 return None
             except KeyError as ex:
                 utils.logger.error(f"[BilibiliCrawler.get_video_info_task] have not fund note detail video_id:{bvid}, err: {ex}")
+                return None
+            except Exception as ex:
+                utils.logger.exception(
+                    f"[BilibiliCrawler.get_video_info_task] Unexpected error while fetching video detail for {bvid or aid}: {ex}"
+                )
                 return None
 
     async def get_video_play_url_task(self, aid: int, cid: int, semaphore: asyncio.Semaphore) -> Union[Dict, None]:

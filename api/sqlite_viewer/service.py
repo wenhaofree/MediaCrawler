@@ -151,13 +151,28 @@ def _build_time_filter(time_filter: str, start_date: str | None, end_date: str |
         clauses.append("sort_ts < ?")
         params.append(int(end_dt.timestamp()))
 
-    where_clause = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return {
         "time_filter": time_filter,
         "start_date": normalized_start,
         "end_date": normalized_end,
-        "where_clause": where_clause,
+        "clauses": clauses,
         "params": params,
+    }
+
+
+def _build_author_filter(author_query: str | None) -> Dict[str, Any]:
+    normalized_author_query = (author_query or "").strip()
+    if not normalized_author_query:
+        return {
+            "author_query": "",
+            "clauses": [],
+            "params": [],
+        }
+
+    return {
+        "author_query": normalized_author_query,
+        "clauses": ["author_name LIKE ?"],
+        "params": [f"%{normalized_author_query}%"],
     }
 
 
@@ -255,6 +270,7 @@ async def list_records(
     platform: str,
     entity_type: str,
     time_filter: str = "all",
+    author_query: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
     page: int = DEFAULT_PAGE,
@@ -263,6 +279,7 @@ async def list_records(
     validate_platform(platform)
     validate_entity_type(entity_type)
     time_filter_payload = _build_time_filter(time_filter, start_date, end_date)
+    author_filter_payload = _build_author_filter(author_query)
 
     page = max(1, page)
     page_size = max(1, min(page_size, MAX_PAGE_SIZE))
@@ -279,6 +296,7 @@ async def list_records(
                 "entity_type": entity_type,
                 "items": [],
                 "time_filter": time_filter_payload["time_filter"],
+                "author_query": author_filter_payload["author_query"],
                 "start_date": time_filter_payload["start_date"],
                 "end_date": time_filter_payload["end_date"],
                 "page": page,
@@ -286,13 +304,13 @@ async def list_records(
                 "total": 0,
                 "total_pages": 0,
             }
-
-        filtered_union_sql = (
-            f"FROM ({union_sql}) AS combined{time_filter_payload['where_clause']}"
-        )
+        filter_clauses = [*time_filter_payload["clauses"], *author_filter_payload["clauses"]]
+        filter_params = [*time_filter_payload["params"], *author_filter_payload["params"]]
+        where_clause = f" WHERE {' AND '.join(filter_clauses)}" if filter_clauses else ""
+        filtered_union_sql = f"FROM ({union_sql}) AS combined{where_clause}"
         count_cursor = await db.execute(
             f"SELECT COUNT(1) AS total {filtered_union_sql}",
-            tuple(time_filter_payload["params"]),
+            tuple(filter_params),
         )
         total = int((await count_cursor.fetchone())["total"])
 
@@ -303,7 +321,7 @@ async def list_records(
         )
         list_cursor = await db.execute(
             list_sql,
-            tuple([*time_filter_payload["params"], page_size, offset]),
+            tuple([*filter_params, page_size, offset]),
         )
         rows = await list_cursor.fetchall()
 
@@ -312,6 +330,7 @@ async def list_records(
             "entity_type": entity_type,
             "items": [_normalize_list_row(row) for row in rows],
             "time_filter": time_filter_payload["time_filter"],
+            "author_query": author_filter_payload["author_query"],
             "start_date": time_filter_payload["start_date"],
             "end_date": time_filter_payload["end_date"],
             "page": page,

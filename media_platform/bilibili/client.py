@@ -62,15 +62,35 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         self._host = "https://api.bilibili.com"
         self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
+        self._cached_wbi_keys: Optional[Tuple[str, str]] = None
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
 
     async def request(self, method, url, **kwargs) -> Any:
         # Check if proxy has expired before each request
         await self._refresh_proxy_if_expired()
+        max_retries = 3
+        response = None
+        for attempt in range(max_retries):
+            try:
+                async with make_async_client(proxy=self.proxy) as client:
+                    response = await client.request(method, url, timeout=self.timeout, **kwargs)
+                break
+            except httpx.RequestError as exc:
+                if attempt < max_retries - 1:
+                    delay = 1.5 * (2 ** attempt) + random.uniform(0, 0.5)
+                    utils.logger.warning(
+                        f"[BilibiliClient.request] {exc.__class__.__name__} for {url}, "
+                        f"retrying in {delay:.2f}s... (Attempt {attempt + 1}/{max_retries})"
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise DataFetchError(
+                    f"{exc.__class__.__name__}: {exc}"
+                ) from exc
 
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        if response is None:
+            raise DataFetchError("Request failed without a response")
         try:
             data: Dict = response.json()
         except json.JSONDecodeError:
@@ -94,27 +114,77 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         img_key, sub_key = await self.get_wbi_keys()
         return BilibiliSign(img_key, sub_key).sign(req_data)
 
-    async def get_wbi_keys(self) -> Tuple[str, str]:
-        """
-        Get the latest img_key and sub_key
-        :return:
-        """
-        local_storage = await self.playwright_page.evaluate("() => window.localStorage")
+    @staticmethod
+    def _extract_wbi_keys(img_url: str, sub_url: str) -> Tuple[str, str]:
+        img_key = img_url.rsplit('/', 1)[1].split('.')[0]
+        sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
+        return img_key, sub_key
+
+    @staticmethod
+    def _is_page_unavailable_error(exc: Exception) -> bool:
+        error_msg = str(exc).lower()
+        return any(
+            token in error_msg
+            for token in (
+                "target page, context or browser has been closed",
+                "page has been closed",
+                "browser has been closed",
+                "context has been closed",
+                "target closed",
+            )
+        )
+
+    async def _get_wbi_keys_from_page(self) -> Optional[Tuple[str, str]]:
+        try:
+            local_storage = await self.playwright_page.evaluate("() => window.localStorage")
+        except Exception as exc:
+            if self._is_page_unavailable_error(exc):
+                utils.logger.warning(
+                    "[BilibiliClient.get_wbi_keys] Playwright page is unavailable, "
+                    "falling back to /x/web-interface/nav for WBI keys"
+                )
+            else:
+                utils.logger.warning(
+                    f"[BilibiliClient.get_wbi_keys] Failed to read WBI keys from localStorage, "
+                    f"falling back to /x/web-interface/nav: {exc}"
+                )
+            return None
+
         wbi_img_urls = local_storage.get("wbi_img_urls", "")
         if not wbi_img_urls:
             img_url_from_storage = local_storage.get("wbi_img_url")
             sub_url_from_storage = local_storage.get("wbi_sub_url")
             if img_url_from_storage and sub_url_from_storage:
                 wbi_img_urls = f"{img_url_from_storage}-{sub_url_from_storage}"
-        if wbi_img_urls and "-" in wbi_img_urls:
-            img_url, sub_url = wbi_img_urls.split("-")
-        else:
-            resp = await self.request(method="GET", url=self._host + "/x/web-interface/nav")
-            img_url: str = resp['wbi_img']['img_url']
-            sub_url: str = resp['wbi_img']['sub_url']
-        img_key = img_url.rsplit('/', 1)[1].split('.')[0]
-        sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
-        return img_key, sub_key
+
+        if not wbi_img_urls or "-" not in wbi_img_urls:
+            return None
+
+        img_url, sub_url = wbi_img_urls.split("-", 1)
+        return self._extract_wbi_keys(img_url, sub_url)
+
+    async def get_wbi_keys(self) -> Tuple[str, str]:
+        """
+        Get the latest img_key and sub_key
+        :return:
+        """
+        if self._cached_wbi_keys:
+            return self._cached_wbi_keys
+
+        page_keys = await self._get_wbi_keys_from_page()
+        if page_keys:
+            self._cached_wbi_keys = page_keys
+            return page_keys
+
+        resp = await self.request(method="GET", url=self._host + "/x/web-interface/nav")
+        try:
+            img_url: str = resp["wbi_img"]["img_url"]
+            sub_url: str = resp["wbi_img"]["sub_url"]
+        except KeyError as exc:
+            raise DataFetchError("Failed to get WBI keys from /x/web-interface/nav") from exc
+
+        self._cached_wbi_keys = self._extract_wbi_keys(img_url, sub_url)
+        return self._cached_wbi_keys
 
     async def get(self, uri: str, params=None, enable_params_sign: bool = True) -> Dict:
         final_uri = uri

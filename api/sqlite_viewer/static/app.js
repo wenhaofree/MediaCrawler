@@ -1,6 +1,7 @@
 const state = {
   platform: "all",
   entityType: "content",
+  authorQuery: "",
   timeFilter: "all",
   startDate: "",
   endDate: "",
@@ -13,6 +14,7 @@ const state = {
 
 const platformSelect = document.getElementById("platform-select");
 const entityTypeSelect = document.getElementById("entity-type-select");
+const authorQueryInput = document.getElementById("author-query-input");
 const timeFilterSelect = document.getElementById("time-filter-select");
 const timeFilterHint = document.getElementById("time-filter-hint");
 const customDateRange = document.getElementById("custom-date-range");
@@ -122,7 +124,12 @@ function getTimeFilterDisplay() {
   return "未设置";
 }
 
+function getAuthorFilterDisplay() {
+  return state.authorQuery ? state.authorQuery : "全部作者";
+}
+
 function syncTimeFilterControls() {
+  authorQueryInput.value = state.authorQuery;
   timeFilterSelect.value = state.timeFilter;
   startDateInput.value = state.startDate;
   endDateInput.value = state.endDate;
@@ -148,6 +155,7 @@ function renderSummaryBar() {
       "当前平台总记录",
       formatNumber(state.options.platforms.find((item) => item.value === state.platform)?.count || 0),
     ),
+    createSummaryCard("作者筛选", getAuthorFilterDisplay()),
     createSummaryCard("时间筛选", getTimeFilterDisplay()),
   );
 }
@@ -332,7 +340,8 @@ function renderList(payload) {
   state.totalPages = payload.total_pages;
   recordList.innerHTML = "";
 
-  resultMeta.textContent = `当前筛选：${payload.platform} / ${payload.entity_type} / ${getTimeFilterDisplay()}，共 ${formatNumber(payload.total)} 条`;
+  const authorMeta = payload.author_query ? ` / 作者: ${payload.author_query}` : "";
+  resultMeta.textContent = `当前筛选：${payload.platform} / ${payload.entity_type}${authorMeta} / ${getTimeFilterDisplay()}，共 ${formatNumber(payload.total)} 条`;
   paginationMeta.textContent = payload.total
     ? `第 ${payload.page} / ${payload.total_pages} 页`
     : "暂无分页";
@@ -381,6 +390,9 @@ async function loadList() {
     page: String(state.page),
     page_size: String(state.pageSize),
   });
+  if (state.authorQuery) {
+    query.set("author_query", state.authorQuery);
+  }
   if (state.timeFilter === "custom") {
     if (state.startDate) {
       query.set("start_date", state.startDate);
@@ -421,6 +433,24 @@ entityTypeSelect.addEventListener("change", () => {
     syncTimeFilterControls();
     renderSummaryBar();
   }
+  loadList();
+});
+
+authorQueryInput.addEventListener("change", () => {
+  state.authorQuery = authorQueryInput.value.trim();
+  state.page = 1;
+  renderSummaryBar();
+  loadList();
+});
+
+authorQueryInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") {
+    return;
+  }
+  event.preventDefault();
+  state.authorQuery = authorQueryInput.value.trim();
+  state.page = 1;
+  renderSummaryBar();
   loadList();
 });
 
