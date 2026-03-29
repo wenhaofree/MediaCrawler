@@ -34,6 +34,27 @@ from tools import utils
 
 
 class XiaoHongShuLogin(AbstractLogin):
+    LOGIN_DIALOG_SELECTOR = "div.login-container"
+    LOGGED_IN_PROFILE_SELECTORS = (
+        "xpath=//a[contains(@href, '/user/profile/')]//span[text()='我']",
+        "xpath=//a[contains(@href, '/user/profile/') and normalize-space()='我']",
+    )
+    LOGIN_BUTTON_SELECTORS = (
+        "button#login-btn",
+        "button.login-btn",
+        "xpath=//button[@id='login-btn']",
+        "xpath=//button[normalize-space()='登录']",
+    )
+    QRCODE_SELECTORS = (
+        "img.qrcode-img",
+        "xpath=//img[contains(@class, 'qrcode-img')]",
+        "xpath=//div[contains(@class, 'qrcode')]//img",
+    )
+    PHONE_LOGIN_SWITCH_SELECTORS = (
+        "xpath=//div[contains(@class, 'login-container')]//*[normalize-space()='手机号登录']",
+        'xpath=//div[@class="login-container"]//div[@class="other-method"]/div[1]',
+    )
+    PHONE_INPUT_SELECTOR = "label.phone > input"
 
     def __init__(self,
                  login_type: str,
@@ -48,25 +69,85 @@ class XiaoHongShuLogin(AbstractLogin):
         self.login_phone = login_phone
         self.cookie_str = cookie_str
 
+    async def _wait_for_first_visible_locator(self, selectors, timeout_ms: int = 2000):
+        """Return the first visible locator from a selector list."""
+        for selector in selectors:
+            locator = self.context_page.locator(selector).first
+            try:
+                await locator.wait_for(state="visible", timeout=timeout_ms)
+                return locator
+            except Exception:
+                continue
+        return None
+
+    async def _wait_for_login_dialog(self, timeout_ms: int = 2000) -> bool:
+        try:
+            await self.context_page.locator(self.LOGIN_DIALOG_SELECTOR).first.wait_for(
+                state="visible",
+                timeout=timeout_ms,
+            )
+            return True
+        except Exception:
+            return False
+
+    async def _open_login_dialog(self) -> bool:
+        """Open the login dialog if it is not already visible."""
+        if await self._wait_for_login_dialog(timeout_ms=2000):
+            return True
+
+        login_button = await self._wait_for_first_visible_locator(
+            self.LOGIN_BUTTON_SELECTORS,
+            timeout_ms=3000,
+        )
+        if not login_button:
+            utils.logger.error(
+                "[XiaoHongShuLogin._open_login_dialog] Login button not found on page: %s",
+                self.context_page.url,
+            )
+            return False
+
+        await login_button.click()
+        if await self._wait_for_login_dialog(timeout_ms=5000):
+            return True
+
+        utils.logger.error(
+            "[XiaoHongShuLogin._open_login_dialog] Login dialog did not appear after clicking login button"
+        )
+        return False
+
+    async def _find_login_qrcode(self, timeout_ms: int = 5000) -> str:
+        """Try multiple selectors to locate the QR code image."""
+        for selector in self.QRCODE_SELECTORS:
+            base64_qrcode_img = await utils.find_login_qrcode(
+                self.context_page,
+                selector=selector,
+                timeout_ms=timeout_ms,
+            )
+            if base64_qrcode_img:
+                return base64_qrcode_img
+        return ""
+
+    async def is_logged_in_by_ui(self) -> bool:
+        """Check whether the page already exposes logged-in UI markers."""
+        for selector in self.LOGGED_IN_PROFILE_SELECTORS:
+            try:
+                if await self.context_page.is_visible(selector, timeout=1000):
+                    utils.logger.info(
+                        "[XiaoHongShuLogin.is_logged_in_by_ui] Login status confirmed by UI element."
+                    )
+                    return True
+            except Exception:
+                continue
+        return False
+
     @retry(stop=stop_after_attempt(600), wait=wait_fixed(1), retry=retry_if_result(lambda value: value is False))
     async def check_login_state(self, no_logged_in_session: str) -> bool:
         """
         Verify login status using dual-check: UI elements and Cookies.
         """
         # 1. Priority check: Check if the "Me" (Profile) node appears in the sidebar
-        try:
-            # Selector for elements containing "Me" text with a link pointing to the profile
-            # XPath Explanation: Find a span with text "Me" inside an anchor tag (<a>) 
-            # whose href attribute contains "/user/profile/"
-            user_profile_selector = "xpath=//a[contains(@href, '/user/profile/')]//span[text()='我']"
-            
-            # Set a short timeout since this is called within a retry loop
-            is_visible = await self.context_page.is_visible(user_profile_selector, timeout=500)
-            if is_visible:
-                utils.logger.info("[XiaoHongShuLogin.check_login_state] Login status confirmed by UI element ('Me' button).")
-                return True
-        except Exception:
-            pass
+        if await self.is_logged_in_by_ui():
+            return True
 
         # 2. Alternative: Check for CAPTCHA prompt
         if "请通过验证" in await self.context_page.content():
@@ -100,25 +181,25 @@ class XiaoHongShuLogin(AbstractLogin):
         """Login xiaohongshu by mobile"""
         utils.logger.info("[XiaoHongShuLogin.login_by_mobile] Begin login xiaohongshu by mobile ...")
         await asyncio.sleep(1)
-        try:
-            # After entering Xiaohongshu homepage, the login dialog may not pop up automatically, need to manually click login button
-            login_button_ele = await self.context_page.wait_for_selector(
-                selector="xpath=//*[@id='app']/div[1]/div[2]/div[1]/ul/div[1]/button",
-                timeout=5000
+        if not await self._open_login_dialog():
+            utils.logger.info("[XiaoHongShuLogin.login_by_mobile] failed to open login dialog ...")
+            sys.exit()
+
+        phone_input = await self._wait_for_first_visible_locator((self.PHONE_INPUT_SELECTOR,), timeout_ms=2000)
+        if not phone_input:
+            element = await self._wait_for_first_visible_locator(
+                self.PHONE_LOGIN_SWITCH_SELECTORS,
+                timeout_ms=3000,
             )
-            await login_button_ele.click()
-            # The login dialog has two forms: one shows phone number and verification code directly
-            # The other requires clicking to switch to phone login
-            element = await self.context_page.wait_for_selector(
-                selector='xpath=//div[@class="login-container"]//div[@class="other-method"]/div[1]',
-                timeout=5000
-            )
-            await element.click()
-        except Exception as e:
-            utils.logger.info("[XiaoHongShuLogin.login_by_mobile] have not found mobile button icon and keep going ...")
+            if element:
+                await element.click()
+            else:
+                utils.logger.info(
+                    "[XiaoHongShuLogin.login_by_mobile] phone login switch not found, assume phone form is already active ..."
+                )
 
         await asyncio.sleep(1)
-        login_container_ele = await self.context_page.wait_for_selector("div.login-container")
+        login_container_ele = await self.context_page.wait_for_selector(self.LOGIN_DIALOG_SELECTOR)
         input_ele = await login_container_ele.query_selector("label.phone > input")
         await input_ele.fill(self.login_phone)
         await asyncio.sleep(0.5)
@@ -167,24 +248,21 @@ class XiaoHongShuLogin(AbstractLogin):
     async def login_by_qrcode(self):
         """login xiaohongshu website and keep webdriver login state"""
         utils.logger.info("[XiaoHongShuLogin.login_by_qrcode] Begin login xiaohongshu by qrcode ...")
-        # login_selector = "div.login-container > div.left > div.qrcode > img"
-        qrcode_img_selector = "xpath=//img[@class='qrcode-img']"
         # find login qrcode
-        base64_qrcode_img = await utils.find_login_qrcode(
-            self.context_page,
-            selector=qrcode_img_selector
-        )
+        base64_qrcode_img = await self._find_login_qrcode(timeout_ms=5000)
         if not base64_qrcode_img:
-            utils.logger.info("[XiaoHongShuLogin.login_by_qrcode] login failed , have not found qrcode please check ....")
-            # if this website does not automatically popup login dialog box, we will manual click login button
-            await asyncio.sleep(0.5)
-            login_button_ele = self.context_page.locator("xpath=//*[@id='app']/div[1]/div[2]/div[1]/ul/div[1]/button")
-            await login_button_ele.click()
-            base64_qrcode_img = await utils.find_login_qrcode(
-                self.context_page,
-                selector=qrcode_img_selector
+            utils.logger.info(
+                "[XiaoHongShuLogin.login_by_qrcode] qrcode not visible yet, trying to open login dialog ..."
             )
+            if not await self._open_login_dialog():
+                utils.logger.info("[XiaoHongShuLogin.login_by_qrcode] login failed, could not open login dialog ....")
+                sys.exit()
+
+            base64_qrcode_img = await self._find_login_qrcode(timeout_ms=10000)
             if not base64_qrcode_img:
+                utils.logger.info(
+                    "[XiaoHongShuLogin.login_by_qrcode] login failed, have not found qrcode after opening login dialog ...."
+                )
                 sys.exit()
 
         # get not logged session

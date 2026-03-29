@@ -24,7 +24,7 @@ from urllib.parse import urlencode
 
 import httpx
 from playwright.async_api import BrowserContext, Page
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
+from tenacity import RetryError, retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
 from tools.httpx_util import make_async_client
 
 import config
@@ -255,7 +255,9 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         Returns:
 
         """
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+        cookie_str, cookie_dict = utils.convert_cookies(
+            await browser_context.cookies([self._domain, self._host])
+        )
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 
@@ -534,14 +536,44 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             Dict: Creator information
         """
         # Build URI, add xsec parameters to URL if available
-        uri = f"/user/profile/{user_id}"
-        if xsec_token and xsec_source:
-            uri = f"{uri}?xsec_token={xsec_token}&xsec_source={xsec_source}"
+        uri = self._build_creator_profile_uri(user_id, xsec_token, xsec_source)
 
         html_content = await self.request(
             "GET", self._domain + uri, return_response=True, headers=self.headers
         )
         return self._extractor.extract_creator_info_from_html(html_content)
+
+    def _build_creator_profile_uri(self, user_id: str, xsec_token: str = "", xsec_source: str = "") -> str:
+        uri = f"/user/profile/{user_id}"
+        query_params = []
+        if xsec_token:
+            query_params.append(f"xsec_token={xsec_token}")
+        if xsec_source:
+            query_params.append(f"xsec_source={xsec_source}")
+        if query_params:
+            uri = f"{uri}?{'&'.join(query_params)}"
+        return uri
+
+    async def get_notes_by_creator_from_html(
+        self,
+        user_id: str,
+        xsec_token: str = "",
+        xsec_source: str = "",
+    ) -> Dict:
+        """Fallback creator note list by parsing the creator profile HTML."""
+        uri = self._build_creator_profile_uri(user_id, xsec_token, xsec_source)
+        html_content = await self.request(
+            "GET", self._domain + uri, return_response=True, headers=self.headers
+        )
+        notes = self._extractor.extract_creator_notes_from_html(
+            html_content,
+            xsec_source=xsec_source or "pc_search",
+        )
+        return {
+            "notes": notes,
+            "has_more": False,
+            "cursor": "",
+        }
 
     async def get_notes_by_creator(
         self,
@@ -597,9 +629,22 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         notes_has_more = True
         notes_cursor = ""
         while notes_has_more and len(result) < config.CRAWLER_MAX_NOTES_COUNT:
-            notes_res = await self.get_notes_by_creator(
-                user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
-            )
+            try:
+                notes_res = await self.get_notes_by_creator(
+                    user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
+                )
+            except (RetryError, DataFetchError) as exc:
+                root_exc = exc.last_attempt.exception() if isinstance(exc, RetryError) else exc
+                utils.logger.warning(
+                    "[XiaoHongShuClient.get_all_notes_by_creator] user_posted API failed for user %s, fallback to creator HTML snapshot: %s",
+                    user_id,
+                    root_exc,
+                )
+                notes_res = await self.get_notes_by_creator_from_html(
+                    user_id=user_id,
+                    xsec_token=xsec_token,
+                    xsec_source=xsec_source,
+                )
             if not notes_res:
                 utils.logger.error(
                     f"[XiaoHongShuClient.get_notes_by_creator] The current creator may have been banned by xhs, so they cannot access the data."

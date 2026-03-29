@@ -40,10 +40,11 @@ uv run main.py --platform dy --lt qrcode --type creator --creator_id "MS4wLjABAA
 
 uv run main.py --platform bili --lt qrcode --type creator --creator_id "625267185"
 
-uv run main.py --platform xhs --lt qrcode --type creator --creator_id "https://www.xiaohongshu.com/user/profile/640c29eb000000001001c91b?xsec_token=ABhC5chjrgmTjNDSBeeLLNtrpvHHHA3Zz8u3s5duXIRO0%3D"
-
+uv run main.py --platform xhs --lt qrcode --type creator --creator_id "https://www.xiaohongshu.com/user/profile/640c29eb000000001001c91b?xsec_token=ABhC5chjrgmTjNDSBeeLLNtrpvHHHA3Zz8u3s5duXIRO0%3D&xsec_source=pc_search"
 
 uv run main.py --platform wb --lt qrcode --type creator --creator_id "5648162302"
+
+uv run main.py --platform zhihu --lt qrcode --type creator --creator_id "morgancheng"
 
 ```
 
@@ -73,9 +74,14 @@ uv run uvicorn api.main:app --port 8080 --reload
 ## 5. 采集列表统计：
 1. 抖音：
     - 赛文乔伊：MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk
+    - 朋克周：MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5
+    - 赛博小凡：MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU
 2. B站：
     - 零度博客：625267185
+    - 熠辉IndieDev:39930228
 3. 小红书：
-    - 
+    - AI教练振轩:9639762311
 4. 知乎：
-    - 
+    - 程墨Morgan:https://www.zhihu.com/people/morgancheng
+5. 微博：
+    - 黄建同学:5648162302

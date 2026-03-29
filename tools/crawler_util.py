@@ -40,13 +40,19 @@ from . import utils
 from .httpx_util import make_async_client
 
 
-async def find_login_qrcode(page: Page, selector: str) -> str:
+async def find_login_qrcode(page: Page, selector: str, timeout_ms: int = 30000) -> str:
     """find login qrcode image from target selector"""
     try:
         elements = await page.wait_for_selector(
             selector=selector,
+            timeout=timeout_ms,
+            state="visible",
         )
-        login_qrcode_img = str(await elements.get_property("src"))  # type: ignore
+        login_qrcode_img = await elements.get_attribute("src")
+        if not login_qrcode_img:
+            login_qrcode_img = await elements.evaluate("(img) => img.src")
+        if not login_qrcode_img:
+            raise ValueError("qrcode src is empty")
         if "http://" in login_qrcode_img or "https://" in login_qrcode_img:
             async with make_async_client(follow_redirects=True) as client:
                 utils.logger.info(f"[find_login_qrcode] get qrcode by url:{login_qrcode_img}")
@@ -58,8 +64,14 @@ async def find_login_qrcode(page: Page, selector: str) -> str:
                 raise Exception(f"fetch login image url failed, response message:{resp.text}")
         return login_qrcode_img
 
-    except Exception as e:
-        print(e)
+    except Exception as exc:
+        utils.logger.warning(
+            "[find_login_qrcode] failed to locate qrcode selector=%s url=%s error=%s: %s",
+            selector,
+            page.url,
+            exc.__class__.__name__,
+            exc,
+        )
         return ""
 
 

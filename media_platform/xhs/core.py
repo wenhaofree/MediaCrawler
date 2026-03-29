@@ -56,6 +56,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
     def __init__(self) -> None:
         self.index_url = "https://www.xiaohongshu.com"
+        self.api_url = "https://edith.xiaohongshu.com"
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         self.cdp_manager = None
@@ -104,7 +105,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     context_page=self.context_page,
                     cookie_str=config.COOKIES,
                 )
-                await login_obj.begin()
+                if await login_obj.is_logged_in_by_ui():
+                    utils.logger.info(
+                        "[XiaoHongShuCrawler.start] Xhs page already shows logged-in UI, skip explicit login flow ..."
+                    )
+                else:
+                    await login_obj.begin()
                 await self.xhs_client.update_cookies(browser_context=self.browser_context)
 
             crawler_type_var.set(config.CRAWLER_TYPE)
@@ -356,7 +362,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
     async def create_xhs_client(self, httpx_proxy: Optional[str]) -> XiaoHongShuClient:
         """Create Xiaohongshu client"""
         utils.logger.info("[XiaoHongShuCrawler.create_xhs_client] Begin create Xiaohongshu API client ...")
-        cookie_str, cookie_dict = utils.convert_cookies(await self.browser_context.cookies())
+        xhs_cookies = await self.browser_context.cookies([self.index_url, self.api_url])
+        cookie_str, cookie_dict = utils.convert_cookies(xhs_cookies)
         xhs_client_obj = XiaoHongShuClient(
             proxy=httpx_proxy,
             headers={

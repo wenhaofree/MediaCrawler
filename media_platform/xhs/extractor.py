@@ -19,7 +19,7 @@
 
 import json
 import re
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import humps
 
@@ -59,7 +59,7 @@ class XiaoHongShuExtractor:
             Dict: User information dictionary
         """
         match = re.search(
-            r"<script>window.__INITIAL_STATE__=(.+)<\/script>", html, re.M
+            r"<script>window.__INITIAL_STATE__=(.+)<\/script>", html, re.M | re.S
         )
         if match is None:
             return None
@@ -67,3 +67,38 @@ class XiaoHongShuExtractor:
         if info is None:
             return None
         return info.get("user").get("userPageData")
+
+    def extract_creator_notes_from_html(self, html: str, xsec_source: str = "pc_search") -> List[Dict]:
+        """Extract creator note list from the profile page HTML snapshot."""
+        match = re.search(
+            r"<script>window.__INITIAL_STATE__=(.+)<\/script>", html, re.M | re.S
+        )
+        if match is None:
+            return []
+
+        info = json.loads(match.group(1).replace(":undefined", ":null"), strict=False)
+        if info is None:
+            return []
+
+        raw_notes = info.get("user", {}).get("notes", [])
+        normalized_notes: List[Dict] = []
+        for note_group in raw_notes:
+            if isinstance(note_group, dict):
+                note_group = [note_group]
+            if not isinstance(note_group, list):
+                continue
+
+            for note_item in note_group:
+                note_card = note_item.get("noteCard", {}) if isinstance(note_item, dict) else {}
+                note_id = note_card.get("noteId") or note_item.get("id")
+                note_token = note_item.get("xsecToken") or note_card.get("xsecToken") or ""
+                if not note_id or not note_token:
+                    continue
+                normalized_notes.append(
+                    {
+                        "note_id": note_id,
+                        "xsec_token": note_token,
+                        "xsec_source": xsec_source or "pc_search",
+                    }
+                )
+        return normalized_notes
