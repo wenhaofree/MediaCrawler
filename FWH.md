@@ -85,3 +85,11 @@ uv run uvicorn api.main:app --port 8080 --reload
     - 程墨Morgan:https://www.zhihu.com/people/morgancheng
 5. 微博：
     - 黄建同学:5648162302
+
+
+
+## Bug:
+1. 微博限制查询条数
+2. 抖音查询过程中失败；
+3. 小红书采集数据中途失败；
+4. B站++知乎OK

@@ -169,7 +169,11 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         Returns:
 
         """
-        cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+        cookie_str, cookie_dict = utils.convert_cookies(
+            await browser_context.cookies(
+                [zhihu_constant.ZHIHU_URL, zhihu_constant.ZHIHU_ZHUANLAN_URL]
+            )
+        )
         self.default_headers["cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 

@@ -34,6 +34,10 @@ from tools import utils
 
 
 class ZhiHuLogin(AbstractLogin):
+    COOKIE_URLS = (
+        "https://www.zhihu.com",
+        "https://zhuanlan.zhihu.com",
+    )
 
     def __init__(self,
                  login_type: str,
@@ -48,6 +52,12 @@ class ZhiHuLogin(AbstractLogin):
         self.login_phone = login_phone
         self.cookie_str = cookie_str
 
+    async def is_logged_in_by_cookie(self) -> bool:
+        current_cookie = await self.browser_context.cookies(list(self.COOKIE_URLS))
+        _, cookie_dict = utils.convert_cookies(current_cookie)
+        current_web_session = cookie_dict.get("z_c0")
+        return bool(current_web_session)
+
     @retry(stop=stop_after_attempt(600), wait=wait_fixed(1), retry=retry_if_result(lambda value: value is False))
     async def check_login_state(self) -> bool:
         """
@@ -55,10 +65,7 @@ class ZhiHuLogin(AbstractLogin):
         Returns:
 
         """
-        current_cookie = await self.browser_context.cookies()
-        _, cookie_dict = utils.convert_cookies(current_cookie)
-        current_web_session = cookie_dict.get("z_c0")
-        if current_web_session:
+        if await self.is_logged_in_by_cookie():
             return True
         return False
 

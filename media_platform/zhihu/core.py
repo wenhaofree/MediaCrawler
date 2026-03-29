@@ -112,7 +112,12 @@ class ZhihuCrawler(AbstractCrawler):
                     context_page=self.context_page,
                     cookie_str=config.COOKIES,
                 )
-                await login_obj.begin()
+                if await login_obj.is_logged_in_by_cookie():
+                    utils.logger.info(
+                        "[ZhihuCrawler.start] Zhihu cookies already show a logged-in browser, skip explicit login flow ..."
+                    )
+                else:
+                    await login_obj.begin()
                 await self.zhihu_client.update_cookies(
                     browser_context=self.browser_context
                 )
@@ -394,7 +399,9 @@ class ZhihuCrawler(AbstractCrawler):
             "[ZhihuCrawler.create_zhihu_client] Begin create zhihu API client ..."
         )
         cookie_str, cookie_dict = utils.convert_cookies(
-            await self.browser_context.cookies()
+            await self.browser_context.cookies(
+                [constant.ZHIHU_URL, constant.ZHIHU_ZHUANLAN_URL]
+            )
         )
         zhihu_client_obj = ZhiHuClient(
             proxy=httpx_proxy,
