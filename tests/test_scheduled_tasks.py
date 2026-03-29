@@ -36,6 +36,18 @@ def test_schedule_tasks_page_available(monkeypatch):
     assert "每日定时采集配置" in response.text
 
 
+def test_homepage_contains_quick_links_for_data_pages(monkeypatch):
+    monkeypatch.setattr("api.main.scheduled_task_service.start", _noop_async)
+    monkeypatch.setattr("api.main.scheduled_task_service.shutdown", _noop_async)
+
+    client = TestClient(app)
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "/sqlite-viewer" in response.text
+    assert "/schedule-tasks" in response.text
+
+
 @pytest.mark.asyncio
 async def test_scheduled_task_create_and_list_supports_multiple_creators(tmp_path, monkeypatch):
     service = await _build_service(tmp_path, monkeypatch)

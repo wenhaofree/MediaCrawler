@@ -224,6 +224,11 @@ class DouYinCrawler(AbstractCrawler):
             except KeyError as ex:
                 utils.logger.error(f"[DouYinCrawler.get_aweme_detail] have not fund note detail aweme_id:{aweme_id}, err: {ex}")
                 return None
+            except Exception as ex:
+                utils.logger.exception(
+                    f"[DouYinCrawler.get_aweme_detail] unexpected error for aweme_id:{aweme_id}"
+                )
+                return None
 
     async def batch_get_note_comments(self, aweme_list: List[str]) -> None:
         """
@@ -282,7 +287,16 @@ class DouYinCrawler(AbstractCrawler):
                 await douyin_store.save_creator(user_id, creator=creator_info)
 
             # Get all video information of the creator
-            all_video_list = await self.dy_client.get_all_user_aweme_posts(sec_user_id=user_id, callback=self.fetch_creator_video_detail)
+            try:
+                all_video_list = await self.dy_client.get_all_user_aweme_posts(
+                    sec_user_id=user_id,
+                    callback=self.fetch_creator_video_detail,
+                )
+            except DataFetchError as ex:
+                utils.logger.error(
+                    f"[DouYinCrawler.get_creators_and_videos] Failed to fetch creator videos for sec_user_id:{user_id}, err: {ex}"
+                )
+                continue
 
             video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
             await self.batch_get_note_comments(video_ids)
@@ -294,8 +308,13 @@ class DouYinCrawler(AbstractCrawler):
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_aweme_detail(post_item.get("aweme_id"), semaphore) for post_item in video_list]
 
-        note_details = await asyncio.gather(*task_list)
-        for aweme_item in note_details:
+        note_details = await asyncio.gather(*task_list, return_exceptions=True)
+        for post_item, aweme_item in zip(video_list, note_details):
+            if isinstance(aweme_item, Exception):
+                utils.logger.error(
+                    f"[DouYinCrawler.fetch_creator_video_detail] Failed to fetch aweme detail for aweme_id:{post_item.get('aweme_id')}, err: {aweme_item}"
+                )
+                continue
             if aweme_item is not None:
                 await douyin_store.update_douyin_aweme(aweme_item=aweme_item)
                 await self.get_aweme_media(aweme_item=aweme_item)

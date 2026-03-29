@@ -20,6 +20,7 @@
 import asyncio
 import copy
 import json
+import random
 import urllib.parse
 from typing import TYPE_CHECKING, Any, Callable, Dict, Union, Optional
 
@@ -118,8 +119,28 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         # Check whether the proxy has expired before each request
         await self._refresh_proxy_if_expired()
 
-        async with make_async_client(proxy=self.proxy) as client:
-            response = await client.request(method, url, timeout=self.timeout, **kwargs)
+        response = None
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                async with make_async_client(proxy=self.proxy) as client:
+                    response = await client.request(
+                        method, url, timeout=self.timeout, **kwargs
+                    )
+                break
+            except httpx.RequestError as exc:
+                if attempt < max_retries - 1:
+                    delay = 1.5 * (2 ** attempt) + random.uniform(0, 0.5)
+                    utils.logger.warning(
+                        f"[DouYinClient.request] {exc.__class__.__name__} for {url}, "
+                        f"retrying in {delay:.2f}s... (Attempt {attempt + 1}/{max_retries})"
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                raise DataFetchError(f"{exc.__class__.__name__}: {exc}") from exc
+
+        if response is None:
+            raise DataFetchError("Request failed without a response")
         try:
             if response.text == "" or response.text == "blocked":
                 utils.logger.error(f"request params incrr, response.text: {response.text}")

@@ -90,6 +90,14 @@ http://127.0.0.1:8080/schedule-tasks
 5. 微博：
     - 黄建同学:5648162302
 
+### 对比账号：张咋啦
+- https://www.youtube.com/@ZaraZhangg
+- https://x.com/zarazhangrui
+- https://zarazhang.com/
+- https://github.com/zarazhangrui
+- https://www.xiaohongshu.com/user/profile/59757acd50c4b45e6e9a90df?xsec_token=ABLm9ubP8h5K7BPivaQomdi0CzsZNBtVh3jGWqZicxKH0%3D&xsec_source=pc_search
+- 视频号
+- 
 
 
 ## Bug:
