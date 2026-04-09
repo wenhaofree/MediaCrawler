@@ -175,13 +175,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             ),
         ] = config.START_PAGE,
         keywords: Annotated[
-            str,
+            Optional[list[str]],
             typer.Option(
                 "--keywords",
-                help="Enter keywords, multiple keywords separated by commas",
+                help="Enter keywords, multiple keywords separated by commas or multiple flags",
                 rich_help_panel="Basic Configuration",
             ),
-        ] = config.KEYWORDS,
+        ] = None,
         get_comment: Annotated[
             str,
             typer.Option(
@@ -236,21 +236,21 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             ),
         ] = config.COOKIES,
         specified_id: Annotated[
-            str,
+            Optional[list[str]],
             typer.Option(
                 "--specified_id",
-                help="Post/video ID list in detail mode, multiple IDs separated by commas (supports full URL or ID)",
+                help="Post/video ID list in detail mode, supports multiple IDs (comma-separated or multiple flags)",
                 rich_help_panel="Basic Configuration",
             ),
-        ] = "",
+        ] = None,
         creator_id: Annotated[
-            str,
+            Optional[list[str]],
             typer.Option(
                 "--creator_id",
-                help="Creator ID list in creator mode, multiple IDs separated by commas (supports full URL or ID)",
+                help="Creator ID list in creator mode, supports multiple IDs (comma-separated or multiple flags)",
                 rich_help_panel="Basic Configuration",
             ),
-        ] = "",
+        ] = None,
         max_comments_count_singlenotes: Annotated[
             int,
             typer.Option(
@@ -327,16 +327,28 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         enable_cdp_attach_only = _to_bool(cdp_attach_only)
         init_db_value = init_db.value if init_db else None
 
-        # Parse specified_id and creator_id into lists
-        specified_id_list = [id.strip() for id in specified_id.split(",") if id.strip()] if specified_id else []
-        creator_id_list = [id.strip() for id in creator_id.split(",") if id.strip()] if creator_id else []
+        # Parse keywords, specified_id and creator_id into lists
+        keywords_val = keywords if keywords else [config.KEYWORDS]
+        keywords_list = []
+        for item in keywords_val:
+            keywords_list.extend([k.strip() for k in item.split(",") if k.strip()])
+
+        specified_id_list = []
+        if specified_id:
+            for item in specified_id:
+                specified_id_list.extend([id.strip() for id in item.split(",") if id.strip()])
+
+        creator_id_list = []
+        if creator_id:
+            for item in creator_id:
+                creator_id_list.extend([id.strip() for id in item.split(",") if id.strip()])
 
         # override global config
         config.PLATFORM = platform.value
         config.LOGIN_TYPE = lt.value
         config.CRAWLER_TYPE = crawler_type.value
         config.START_PAGE = start
-        config.KEYWORDS = keywords
+        config.KEYWORDS = ",".join(keywords_list)
         config.ENABLE_GET_COMMENTS = enable_comment
         config.ENABLE_GET_SUB_COMMENTS = enable_sub_comment
         config.HEADLESS = enable_headless

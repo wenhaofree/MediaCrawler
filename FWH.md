@@ -75,6 +75,26 @@ http://127.0.0.1:8080/schedule-tasks
 
 
 
+
+### 一次性批量采集命令 (支持多 ID)：
+```bash
+# 抖音 (批量采集 3 个账号)
+uv run main.py --platform dy --lt qrcode --type creator --max_pages 3 --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk,MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5,MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU"
+
+# B站 (批量采集 14 个账号)
+uv run main.py --platform bili --lt qrcode --type creator --max_pages 3 --creator_id "625267185,39930228,82363089,3493277319825652,12890453,316183842,322961825,385670211,39613022,19484221,3493280364890116,4401694,486989780,520819684"
+
+# 微博 (批量采集 5 个账号)
+uv run main.py --platform wb --lt qrcode --type creator --max_pages 3 --creator_id "5648162302,1400854834,1660737882,1627825392,1727858283"
+
+# 知乎
+uv run main.py --platform zhihu --lt qrcode --type creator --max_pages 3 --creator_id "morgancheng"
+
+# 小红书
+uv run main.py --platform xhs --lt qrcode --type creator --max_pages 3 --creator_id "640c29eb000000001001c91b,5b4e046811be1031e22f19d8"
+```
+
+
 ## 5. 采集列表统计：
 1. 抖音：
     - 赛文乔伊：MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk
@@ -83,39 +103,31 @@ http://127.0.0.1:8080/schedule-tasks
 2. B站：
     - 零度博客：625267185
     - 熠辉IndieDev:39930228
+    - 小宇Boi：82363089
+    - AI超元域：3493277319825652
+    - 程序员鱼皮：12890453
+    - 技术爬爬虾：316183842
+    - 黄益贺：322961825
+    - 秋芝2046：385670211
+    - 赛文乔伊：39613022
+    - 朋克周：19484221
+    - AI教练振轩:3493280364890116
+    - 林亦LYi: 4401694
+    - 程序员鱼皮:12890453
+    - 老麦的工具库: 486989780
+    - 小Lin说: 520819684
 3. 小红书：
     - AI教练振轩:9639762311
 4. 知乎：
     - 程墨Morgan:https://www.zhihu.com/people/morgancheng
 5. 微博：
     - 黄建同学:5648162302
+    - ruanyf:1400854834
+    - 小北带你飞:1660737882
+    - 互联网的那点事：1627825392
+    - 宝玉xp：1727858283
 
-### 一次性采集作用命令：
-````bash
-#抖音
-uv run main.py --platform dy --lt qrcode --type creator --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"  --max_pages 3 
-
-uv run main.py --platform dy --lt qrcode --type creator --creator_id "朋克周：MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5"  --max_pages 3 
-
-uv run main.py --platform dy --lt qrcode --type creator --creator_id "MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU"  --max_pages 3 
-
-#B站
-uv run main.py --platform bili --lt qrcode --type creator --creator_id "625267185" --max_pages 3 
-
-uv run main.py --platform bili --lt qrcode --type creator --creator_id "39930228" --max_pages 3 
-
-#微博：
-uv run main.py --platform wb --lt qrcode --type creator --creator_id "5648162302" --max_pages 3 
-
-#知乎
-uv run main.py --platform zhihu --lt qrcode --type creator --creator_id "morgancheng" --max_pages 3
-
-#小红书：
-uv run main.py --platform xhs --lt qrcode --type creator --creator_id "https://www.xiaohongshu.com/user/profile/640c29eb000000001001c91b?xsec_token=ABhC5chjrgmTjNDSBeeLLNtrpvHHHA3Zz8u3s5duXIRO0%3D&xsec_source=pc_search" --max_pages 3
-
-````
-
-### 对比账号：张咋啦
+### 对标账号：张咋啦
 - https://www.youtube.com/@ZaraZhangg
 - https://x.com/zarazhangrui
 - https://zarazhang.com/
@@ -123,6 +135,15 @@ uv run main.py --platform xhs --lt qrcode --type creator --creator_id "https://w
 - https://www.xiaohongshu.com/user/profile/59757acd50c4b45e6e9a90df?xsec_token=ABLm9ubP8h5K7BPivaQomdi0CzsZNBtVh3jGWqZicxKH0%3D&xsec_source=pc_search
 - 视频号
 - 
+
+### 个人账户ID：文浩
+- 小红书： 5b4e046811be1031e22f19d8
+- B站：391635122
+- 微博：2177169610
+- 知乎：
+- 抖音：MS4wLjABAAAAA9_xiL1Q_Yl0VyuR_y7nWN1h5avCDvSZIpoT1HZ9retKOnkqmTYmAqTXdz-Iuf8a
+- 快手：3xeks654q36yck6
+
 
 
 ## Bug:
