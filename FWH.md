@@ -82,10 +82,10 @@ http://127.0.0.1:8080/schedule-tasks
 uv run main.py --platform dy --lt qrcode --type creator --max_pages 3 --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk,MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5,MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU"
 
 # B站 (批量采集 14 个账号)
-uv run main.py --platform bili --lt qrcode --type creator --max_pages 3 --creator_id "625267185,39930228,82363089,3493277319825652,12890453,316183842,322961825,385670211,39613022,19484221,3493280364890116,4401694,486989780,520819684"
+uv run main.py --platform bili --lt qrcode --type creator --max_pages 3 --creator_id "625267185,13416784,39930228,82363089,3493277319825652,12890453,316183842,322961825,385670211,39613022,19484221,3493280364890116,4401694,486989780,520819684,14097567"
 
 # 微博 (批量采集 5 个账号)
-uv run main.py --platform wb --lt qrcode --type creator --max_pages 3 --creator_id "5648162302,1400854834,1660737882,1627825392,1727858283"
+uv run main.py --platform wb --lt qrcode --type creator --max_pages 3 --creator_id "5648162302,1400854834,1660737882,1627825392,1727858283,6182606334"
 
 # 知乎
 uv run main.py --platform zhihu --lt qrcode --type creator --max_pages 3 --creator_id "morgancheng"
@@ -116,6 +116,8 @@ uv run main.py --platform xhs --lt qrcode --type creator --max_pages 3 --creator
     - 程序员鱼皮:12890453
     - 老麦的工具库: 486989780
     - 小Lin说: 520819684
+    - 花生：14097567
+    - 木子不写代码：13416784
 3. 小红书：
     - AI教练振轩:9639762311
 4. 知乎：
@@ -153,3 +155,22 @@ uv run main.py --platform xhs --lt qrcode --type creator --max_pages 3 --creator
 4. 知乎限制条数；
 5. B站+知乎OK
 6. 定时任务的采集抖音作品没有成功，作者信息采集入库了
+
+
+# 常用命令：
+<!-- 环境 -->
+source .venv/bin/activate
+
+<!-- 启动 -->
+open -na "Google Chrome" --args \
+    --remote-debugging-port=9222 \
+    --user-data-dir="$HOME/.chrome-cdp-investing"
+
+<!-- 哔哩 -->
+uv run main.py --platform bili --lt qrcode --type creator --max_pages 3 --creator_id "625267185,13416784,39930228,82363089,3493277319825652,12890453,316183842,322961825,385670211,39613022,19484221,3493280364890116,4401694,486989780,520819684,14097567"
+
+<!-- 微博 -->
+uv run main.py --platform wb --lt qrcode --type creator --max_pages 3 --creator_id "5648162302,1400854834,1660737882,1627825392,1727858283,6182606334"
+
+<!-- 启动服务 -->
+uv run uvicorn api.main:app --port 8080 --reload

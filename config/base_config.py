@@ -82,7 +82,7 @@ AUTO_CLOSE_BROWSER = True
 SAVE_DATA_OPTION = "sqlite"  # csv or db or json or jsonl or sqlite or excel or postgres
 
 # Data saving path, if not specified by default, it will be saved to the data folder.
-SAVE_DATA_PATH = "/Users/wenhao/fuwenhao/temp/demo-mediacrawler/data/"
+SAVE_DATA_PATH = "/Users/wenhao/fuwenhao/temp/work-mediacrawler/data/"
 
 # Browser file configuration cached by the user's browser
 USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name
