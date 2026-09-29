@@ -21,6 +21,7 @@
 # 主页链接、签名、性别等一律不落库）。原始用户 ID 在提取层经
 # tools.user_hash.anonymize_user_id 转为匿名 creator_hash 后写入，
 # 仅用于"同一创作者"的内容分组；昵称保留但经 mask_nickname 中间脱敏。
+# GoofishItem 是本地闲鱼采集例外，按用户配置保留卖家 ID、头像和主页链接。
 # 创作者个人档案表（XhsCreator/DyCreator/WeiboCreator/TiebaCreator/
 # ZhihuCreator/BilibiliUpInfo/BilibiliContactInfo）已整体移除。
 
@@ -190,13 +191,24 @@ class GoofishItem(Base):
     desc = Column(Text, comment='商品描述')
     item_url = Column(Text, comment='商品URL')
     price = Column(Text, comment='价格')
+    original_price = Column(Text, comment='原价')
+    discount_label = Column(Text, comment='价格标签')
+    shipping = Column(Text, comment='邮费')
     area = Column(Text, comment='地区')
     image_url = Column(Text, comment='主图URL')
     want_count = Column(Text, comment='想要人数')
     browse_count = Column(Text, comment='浏览量')
     publish_time = Column(Text, comment='发布时间')
-    user_nickname = Column(Text, comment='卖家脱敏昵称')
+    user_id = Column(Text, comment='卖家ID')
+    user_nickname = Column(Text, comment='卖家昵称')
+    user_avatar = Column(Text, comment='卖家头像')
+    user_link = Column(Text, comment='卖家主页')
     creator_hash = Column(String(64), index=True, comment='卖家匿名哈希')
+    seller_location = Column(Text, comment='卖家地区')
+    seller_last_active = Column(Text, comment='卖家最近活跃')
+    seller_join_time = Column(Text, comment='卖家闲鱼年限')
+    seller_sold_count = Column(Text, comment='卖家卖出数')
+    seller_good_rate = Column(Text, comment='卖家好评率')
     source_keyword = Column(Text, default='', comment='来源关键词')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')

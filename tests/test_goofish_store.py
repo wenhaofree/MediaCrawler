@@ -49,11 +49,24 @@ async def test_goofish_sqlite_store_upserts_by_item_id(monkeypatch, tmp_path):
         "desc": "",
         "item_url": "https://www.goofish.com/item?id=1001",
         "price": "99",
+        "original_price": "199",
+        "discount_label": "2人小刀价",
+        "shipping": "包邮",
         "area": "上海",
         "image_url": "",
         "want_count": "1",
-        "user_nickname": "张*",
+        "browse_count": "2",
+        "publish_time": "2026-09-28 08:00:00",
+        "user_id": "2218417011733",
+        "user_nickname": "张三",
+        "user_avatar": "https://img.alicdn.com/bao/avatar.webp",
+        "user_link": "https://www.goofish.com/personal?userId=2218417011733",
         "creator_hash": "hash",
+        "seller_location": "上海",
+        "seller_last_active": "10分钟前来过",
+        "seller_join_time": "来闲鱼2年",
+        "seller_sold_count": "卖出1878件宝贝",
+        "seller_good_rate": "好评率98%",
         "source_keyword": "耳机",
         "last_modify_ts": 1,
     }
@@ -67,4 +80,9 @@ async def test_goofish_sqlite_store_upserts_by_item_id(monkeypatch, tmp_path):
 
     assert count == 1
     assert row.title == "new"
+    assert row.user_id == "2218417011733"
+    assert row.user_avatar == "https://img.alicdn.com/bao/avatar.webp"
+    assert row.user_link == "https://www.goofish.com/personal?userId=2218417011733"
+    assert row.original_price == "199"
+    assert row.seller_good_rate == "好评率98%"
     assert row.add_ts
