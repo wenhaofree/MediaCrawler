@@ -22,6 +22,7 @@ from __future__ import annotations
 
 
 import sys
+import re
 from enum import Enum
 from types import SimpleNamespace
 from typing import Iterable, Optional, Sequence, Type, TypeVar
@@ -135,6 +136,21 @@ def _inject_init_db_default(args: Sequence[str]) -> list[str]:
     return normalized
 
 
+def _normalize_tieba_note_id(value: str) -> str:
+    """Accept a raw Tieba thread id or a /p/<id> URL."""
+    value = value.strip()
+    match = re.search(r"/p/(\d+)", value)
+    return match.group(1) if match else value
+
+
+def _normalize_tieba_creator_url(value: str) -> str:
+    """Accept a Tieba creator homepage URL or a portrait id."""
+    value = value.strip()
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    return f"https://tieba.baidu.com/home/main?id={value}"
+
+
 async def parse_cmd(argv: Optional[Sequence[str]] = None):
     """Parse command line arguments using Typer."""
 
@@ -175,13 +191,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             ),
         ] = config.START_PAGE,
         keywords: Annotated[
-            Optional[list[str]],
+            str,
             typer.Option(
                 "--keywords",
-                help="Enter keywords, multiple keywords separated by commas or multiple flags",
+                help="Enter keywords, multiple keywords separated by commas",
                 rich_help_panel="Basic Configuration",
             ),
-        ] = None,
+        ] = config.KEYWORDS,
         get_comment: Annotated[
             str,
             typer.Option(
@@ -200,6 +216,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 show_default=True,
             ),
         ] = str(config.ENABLE_GET_SUB_COMMENTS),
+        get_media: Annotated[
+            str,
+            typer.Option(
+                "--get_media",
+                help="Whether to download media files (cover/video/images of the post), supports yes/true/t/y/1 or no/false/f/n/0 (xhs/dy/ks/bili/wb)",
+                rich_help_panel="Storage Configuration",
+                show_default=True,
+            ),
+        ] = str(config.ENABLE_GET_MEDIA),
         headless: Annotated[
             str,
             typer.Option(
@@ -236,21 +261,21 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             ),
         ] = config.COOKIES,
         specified_id: Annotated[
-            Optional[list[str]],
+            str,
             typer.Option(
                 "--specified_id",
-                help="Post/video ID list in detail mode, supports multiple IDs (comma-separated or multiple flags)",
+                help="Post/video ID list in detail mode, multiple IDs separated by commas (supports full URL or ID)",
                 rich_help_panel="Basic Configuration",
             ),
-        ] = None,
+        ] = "",
         creator_id: Annotated[
-            Optional[list[str]],
+            str,
             typer.Option(
                 "--creator_id",
-                help="Creator ID list in creator mode, supports multiple IDs (comma-separated or multiple flags)",
+                help="Creator ID list in creator mode, multiple IDs separated by commas (supports full URL or ID)",
                 rich_help_panel="Basic Configuration",
             ),
-        ] = None,
+        ] = "",
         max_comments_count_singlenotes: Annotated[
             int,
             typer.Option(
@@ -259,6 +284,14 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Comment Configuration",
             ),
         ] = config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+        crawler_max_notes_count: Annotated[
+            int,
+            typer.Option(
+                "--crawler_max_notes_count",
+                help="Maximum number of videos/posts to crawl",
+                rich_help_panel="Basic Configuration",
+            ),
+        ] = config.CRAWLER_MAX_NOTES_COUNT,
         max_concurrency_num: Annotated[
             int,
             typer.Option(
@@ -267,14 +300,6 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 rich_help_panel="Performance Configuration",
             ),
         ] = config.MAX_CONCURRENCY_NUM,
-        max_pages: Annotated[
-            int,
-            typer.Option(
-                "--max_pages",
-                help="Maximum pages to crawl in creator mode (0 means unlimited)",
-                rich_help_panel="Performance Configuration",
-            ),
-        ] = config.CRAWLER_MAX_PAGES,
         save_data_path: Annotated[
             str,
             typer.Option(
@@ -304,65 +329,53 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             str,
             typer.Option(
                 "--ip_proxy_provider_name",
-                help="IP proxy provider name (kuaidaili | wandouhttp)",
+                help="IP proxy provider name (kuaidaili | wandouhttp | static)",
                 rich_help_panel="Proxy Configuration",
             ),
         ] = config.IP_PROXY_PROVIDER_NAME,
-        cdp_attach_only: Annotated[
+        static_proxy_url: Annotated[
             str,
             typer.Option(
-                "--cdp_attach_only",
-                help="Whether to require attaching to an existing CDP browser instead of launching a new one, supports yes/true/t/y/1 or no/false/f/n/0",
-                rich_help_panel="Runtime Configuration",
-                show_default=True,
+                "--static_proxy_url",
+                help="Static proxy URL, for example http://user:password@host:port",
+                rich_help_panel="Proxy Configuration",
             ),
-        ] = str(config.CDP_ATTACH_ONLY),
+        ] = config.STATIC_PROXY_URL,
     ) -> SimpleNamespace:
         """MediaCrawler 命令行入口"""
 
         enable_comment = _to_bool(get_comment)
         enable_sub_comment = _to_bool(get_sub_comment)
+        enable_media = _to_bool(get_media)
         enable_headless = _to_bool(headless)
         enable_ip_proxy_value = _to_bool(enable_ip_proxy)
-        enable_cdp_attach_only = _to_bool(cdp_attach_only)
         init_db_value = init_db.value if init_db else None
 
-        # Parse keywords, specified_id and creator_id into lists
-        keywords_val = keywords if keywords else [config.KEYWORDS]
-        keywords_list = []
-        for item in keywords_val:
-            keywords_list.extend([k.strip() for k in item.split(",") if k.strip()])
-
-        specified_id_list = []
-        if specified_id:
-            for item in specified_id:
-                specified_id_list.extend([id.strip() for id in item.split(",") if id.strip()])
-
-        creator_id_list = []
-        if creator_id:
-            for item in creator_id:
-                creator_id_list.extend([id.strip() for id in item.split(",") if id.strip()])
+        # Parse specified_id and creator_id into lists
+        specified_id_list = [id.strip() for id in specified_id.split(",") if id.strip()] if specified_id else []
+        creator_id_list = [id.strip() for id in creator_id.split(",") if id.strip()] if creator_id else []
 
         # override global config
         config.PLATFORM = platform.value
         config.LOGIN_TYPE = lt.value
         config.CRAWLER_TYPE = crawler_type.value
         config.START_PAGE = start
-        config.KEYWORDS = ",".join(keywords_list)
+        config.KEYWORDS = keywords
         config.ENABLE_GET_COMMENTS = enable_comment
         config.ENABLE_GET_SUB_COMMENTS = enable_sub_comment
+        config.ENABLE_GET_MEDIA = enable_media
         config.HEADLESS = enable_headless
         config.CDP_HEADLESS = enable_headless
         config.SAVE_DATA_OPTION = save_data_option.value
         config.COOKIES = cookies
         config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = max_comments_count_singlenotes
+        config.CRAWLER_MAX_NOTES_COUNT = crawler_max_notes_count
         config.MAX_CONCURRENCY_NUM = max_concurrency_num
-        config.CRAWLER_MAX_PAGES = max_pages
         config.SAVE_DATA_PATH = save_data_path
         config.ENABLE_IP_PROXY = enable_ip_proxy_value
         config.IP_PROXY_POOL_COUNT = ip_proxy_pool_count
         config.IP_PROXY_PROVIDER_NAME = ip_proxy_provider_name
-        config.CDP_ATTACH_ONLY = enable_cdp_attach_only
+        config.STATIC_PROXY_URL = static_proxy_url
 
         # Set platform-specific ID lists for detail/creator mode
         if specified_id_list:
@@ -376,6 +389,12 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 config.WEIBO_SPECIFIED_ID_LIST = specified_id_list
             elif platform == PlatformEnum.KUAISHOU:
                 config.KS_SPECIFIED_ID_LIST = specified_id_list
+            elif platform == PlatformEnum.TIEBA:
+                config.TIEBA_SPECIFIED_ID_LIST = [
+                    _normalize_tieba_note_id(item) for item in specified_id_list
+                ]
+            elif platform == PlatformEnum.ZHIHU:
+                config.ZHIHU_SPECIFIED_ID_LIST = specified_id_list
 
         if creator_id_list:
             if platform == PlatformEnum.XHS:
@@ -388,6 +407,10 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 config.WEIBO_CREATOR_ID_LIST = creator_id_list
             elif platform == PlatformEnum.KUAISHOU:
                 config.KS_CREATOR_ID_LIST = creator_id_list
+            elif platform == PlatformEnum.TIEBA:
+                config.TIEBA_CREATOR_URL_LIST = [
+                    _normalize_tieba_creator_url(item) for item in creator_id_list
+                ]
 
         return SimpleNamespace(
             platform=config.PLATFORM,
@@ -397,14 +420,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             keywords=config.KEYWORDS,
             get_comment=config.ENABLE_GET_COMMENTS,
             get_sub_comment=config.ENABLE_GET_SUB_COMMENTS,
+            get_media=config.ENABLE_GET_MEDIA,
             headless=config.HEADLESS,
             save_data_option=config.SAVE_DATA_OPTION,
             init_db=init_db_value,
             cookies=config.COOKIES,
             specified_id=specified_id,
             creator_id=creator_id,
-            max_pages=config.CRAWLER_MAX_PAGES,
-            cdp_attach_only=config.CDP_ATTACH_ONLY,
         )
 
     command = typer.main.get_command(app)

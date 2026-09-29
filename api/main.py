@@ -23,7 +23,9 @@ Or: python -m api.main
 """
 import asyncio
 import os
+import sys
 import subprocess
+from pathlib import Path
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +36,9 @@ from .routers import crawler_router, data_router, websocket_router
 from .sqlite_viewer import sqlite_viewer_router
 from .scheduled_tasks import scheduled_tasks_router
 from .scheduled_tasks.service import scheduled_task_service
+
+# Project root directory (used for running subprocesses like uv run main.py)
+PROJECT_ROOT = Path(__file__).parent.parent
 
 app = FastAPI(
     title="MediaCrawler WebUI API",
@@ -102,17 +107,30 @@ async def check_environment():
     """Check if MediaCrawler environment is configured correctly"""
     try:
         # Run uv run main.py --help command to check environment
-        process = await asyncio.create_subprocess_exec(
-            "uv", "run", "main.py", "--help",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            cwd="."  # Project root directory
-        )
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(),
-            timeout=30.0  # 30 seconds timeout
-        )
-
+        # Use PROJECT_ROOT so it works regardless of where uvicorn was started
+        if sys.platform == "win32":
+            loop = asyncio.get_running_loop()
+            process = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ["uv", "run", "main.py", "--help"],
+                    capture_output=True,
+                    timeout=30.0,
+                    cwd=str(PROJECT_ROOT)
+                )
+            )
+            stdout, stderr = process.stdout, process.stderr  # bytes
+        else:
+            process = await asyncio.create_subprocess_exec(
+                "uv", "run", "main.py", "--help",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(PROJECT_ROOT)  # Project root directory
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=30.0  # 30 seconds timeout
+            )
         if process.returncode == 0:
             return {
                 "success": True,
@@ -142,7 +160,7 @@ async def check_environment():
         return {
             "success": False,
             "message": "Environment check error",
-            "error": str(e)
+            "error": f"{type(e).__name__}: {str(e) or 'Unknown'}"
         }
 
 

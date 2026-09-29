@@ -20,11 +20,17 @@
 import asyncio
 import json
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 from playwright.async_api import BrowserContext, Page
-from tenacity import RetryError, retry, stop_after_attempt, wait_fixed, retry_if_not_exception_type
+from tenacity import (
+    RetryError,
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_fixed,
+)
 from tools.httpx_util import make_async_client
 
 import config
@@ -35,11 +41,16 @@ from tools import utils
 if TYPE_CHECKING:
     from proxy.proxy_ip_pool import ProxyIpPool
 
-from .exception import DataFetchError, IPBlockError, NoteNotFoundError
+from .exception import (
+    DataFetchError,
+    IPBlockError,
+    NoteNotFoundError,
+    PlatformAccessError,
+)
 from .field import SearchNoteType, SearchSortType
 from .help import get_search_id
 from .extractor import XiaoHongShuExtractor
-from .playwright_sign import sign_with_playwright
+from .playwright_sign import sign_with_xhshow
 
 
 class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
@@ -57,10 +68,16 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         self.proxy = proxy
         self.timeout = timeout
         self.headers = headers
-        self._host = "https://edith.xiaohongshu.com"
-        self._domain = "https://www.xiaohongshu.com"
+        if config.XHS_INTERNATIONAL:
+            self._host = "https://webapi.rednote.com"
+            self._domain = "https://www.rednote.com"
+        else:
+            self._host = "https://edith.xiaohongshu.com"
+            self._domain = "https://www.xiaohongshu.com"
+        self.cookie_urls = [self._domain]
         self.IP_ERROR_STR = "Network connection error, please check network settings or restart"
         self.IP_ERROR_CODE = 300012
+        self.SECURITY_LIMIT_CODE = 300011
         self.NOTE_NOT_FOUND_CODE = -510000
         self.NOTE_ABNORMAL_STR = "Note status abnormal, please check later"
         self.NOTE_ABNORMAL_CODE = -510001
@@ -71,19 +88,16 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         self.init_proxy_pool(proxy_ip_pool)
 
     async def _pre_headers(self, url: str, params: Optional[Dict] = None, payload: Optional[Dict] = None) -> Dict:
-        """Request header parameter signing (using playwright injection method)
+        """请求头参数签名 (使用 xhshow 纯算法)
 
         Args:
-            url: Request URL
-            params: GET request parameters
-            payload: POST request parameters
+            url: 请求 URI path
+            params: GET 请求参数
+            payload: POST 请求参数
 
         Returns:
-            Dict: Signed request header parameters
+            Dict: 签名后的请求头参数
         """
-        a1_value = self.cookie_dict.get("a1", "")
-
-        # Determine request data, method and URI
         if params is not None:
             data = params
             method = "GET"
@@ -93,12 +107,11 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         else:
             raise ValueError("params or payload is required")
 
-        # Generate signature using playwright injection method
-        signs = await sign_with_playwright(
-            page=self.playwright_page,
+        # 使用 xhshow 纯算法生成签名
+        signs = sign_with_xhshow(
             uri=url,
             data=data,
-            a1=a1_value,
+            cookie_str=self.headers.get("Cookie", ""),
             method=method,
         )
 
@@ -111,7 +124,13 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         self.headers.update(headers)
         return self.headers
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1), retry=retry_if_not_exception_type(NoteNotFoundError))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(1),
+        retry=retry_if_not_exception_type(
+            (NoteNotFoundError, IPBlockError, PlatformAccessError)
+        ),
+    )
     async def request(self, method, url, **kwargs) -> Union[str, Any]:
         """
         Wrapper for httpx common request method, processes request response
@@ -131,6 +150,11 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         async with make_async_client(proxy=self.proxy) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
 
+        if response.status_code in {401, 403, 429}:
+            raise PlatformAccessError(
+                f"XHS request blocked with HTTP {response.status_code}"
+            )
+
         if response.status_code == 471 or response.status_code == 461:
             # someday someone maybe will bypass captcha
             verify_type = response.headers["Verifytype"]
@@ -139,18 +163,46 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             utils.logger.error(msg)
             raise Exception(msg)
 
+        response_data: Optional[Dict] = None
+        try:
+            candidate_data = response.json()
+            if isinstance(candidate_data, dict):
+                response_data = candidate_data
+        except (TypeError, ValueError):
+            pass
+
+        response_code = (
+            str(response_data.get("code"))
+            if response_data is not None and response_data.get("code") is not None
+            else ""
+        )
+        if response_code == str(self.IP_ERROR_CODE):
+            raise IPBlockError(self.IP_ERROR_STR)
+        if response_code == str(self.SECURITY_LIMIT_CODE):
+            raise PlatformAccessError(
+                f"XHS account security restriction, code: {self.SECURITY_LIMIT_CODE}"
+            )
+
         if return_response:
             return response.text
-        data: Dict = response.json()
+        data: Dict = response_data if response_data is not None else response.json()
         if data["success"]:
             return data.get("data", data.get("success", {}))
-        elif data["code"] == self.IP_ERROR_CODE:
-            raise IPBlockError(self.IP_ERROR_STR)
+        # IP_ERROR_CODE / SECURITY_LIMIT_CODE are already handled above, before return_response.
         elif data["code"] in (self.NOTE_NOT_FOUND_CODE, self.NOTE_ABNORMAL_CODE):
             raise NoteNotFoundError(f"Note not found or abnormal, code: {data['code']}")
         else:
             err_msg = data.get("msg", None) or f"{response.text}"
             raise DataFetchError(err_msg)
+
+    @staticmethod
+    def _build_query_string(params: Dict) -> str:
+        """Build URL query string with encoding matching browser behavior (commas not encoded)"""
+        parts = []
+        for key, value in params.items():
+            value_str = str(value) if value is not None else ""
+            parts.append(f"{key}={quote(value_str, safe=',')}")
+        return "&".join(parts)
 
     async def get(self, uri: str, params: Optional[Dict] = None) -> Dict:
         """
@@ -163,10 +215,15 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
 
         """
         headers = await self._pre_headers(uri, params)
-        full_url = f"{self._host}{uri}"
+        # Build URL manually to ensure query string encoding matches the sign string
+        # (httpx's default params encoding differs from browser/XHS frontend behavior)
+        if params:
+            full_url = f"{self._host}{uri}?{self._build_query_string(params)}"
+        else:
+            full_url = f"{self._host}{uri}"
 
         return await self.request(
-            method="GET", url=full_url, headers=headers, params=params
+            method="GET", url=full_url, headers=headers
         )
 
     async def post(self, uri: str, data: dict, **kwargs) -> Dict:
@@ -188,29 +245,6 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             headers=headers,
             **kwargs,
         )
-
-    async def get_note_media(self, url: str) -> Union[bytes, None]:
-        # Check if proxy is expired before request
-        await self._refresh_proxy_if_expired()
-
-        async with make_async_client(proxy=self.proxy) as client:
-            try:
-                response = await client.request("GET", url, timeout=self.timeout)
-                response.raise_for_status()
-                if not response.reason_phrase == "OK":
-                    utils.logger.error(
-                        f"[XiaoHongShuClient.get_note_media] request {url} err, res:{response.text}"
-                    )
-                    return None
-                else:
-                    return response.content
-            except (
-                httpx.HTTPError
-            ) as exc:  # some wrong when call httpx.request method, such as connection error, client error, server error or response status code is not 2xx
-                utils.logger.error(
-                    f"[XiaoHongShuClient.get_aweme_media] {exc.__class__.__name__} for {exc.request.url} - {exc}"
-                )  # Keep original exception type name for developer debugging
-                return None
 
     async def query_self(self) -> Optional[Dict]:
         """
@@ -246,7 +280,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         utils.logger.info(f"[XiaoHongShuClient.pong] Login state result: {ping_flag}")
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext):
+    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
         """
         Update cookies method provided by API client, usually called after successful login
         Args:
@@ -255,8 +289,9 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         Returns:
 
         """
-        cookie_str, cookie_dict = utils.convert_cookies(
-            await browser_context.cookies([self._domain, self._host])
+        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
+            browser_context,
+            urls=urls or self.cookie_urls,
         )
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
@@ -536,44 +571,14 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             Dict: Creator information
         """
         # Build URI, add xsec parameters to URL if available
-        uri = self._build_creator_profile_uri(user_id, xsec_token, xsec_source)
+        uri = f"/user/profile/{user_id}"
+        if xsec_token and xsec_source:
+            uri = f"{uri}?xsec_token={xsec_token}&xsec_source={xsec_source}"
 
         html_content = await self.request(
             "GET", self._domain + uri, return_response=True, headers=self.headers
         )
         return self._extractor.extract_creator_info_from_html(html_content)
-
-    def _build_creator_profile_uri(self, user_id: str, xsec_token: str = "", xsec_source: str = "") -> str:
-        uri = f"/user/profile/{user_id}"
-        query_params = []
-        if xsec_token:
-            query_params.append(f"xsec_token={xsec_token}")
-        if xsec_source:
-            query_params.append(f"xsec_source={xsec_source}")
-        if query_params:
-            uri = f"{uri}?{'&'.join(query_params)}"
-        return uri
-
-    async def get_notes_by_creator_from_html(
-        self,
-        user_id: str,
-        xsec_token: str = "",
-        xsec_source: str = "",
-    ) -> Dict:
-        """Fallback creator note list by parsing the creator profile HTML."""
-        uri = self._build_creator_profile_uri(user_id, xsec_token, xsec_source)
-        html_content = await self.request(
-            "GET", self._domain + uri, return_response=True, headers=self.headers
-        )
-        notes = self._extractor.extract_creator_notes_from_html(
-            html_content,
-            xsec_source=xsec_source or "pc_search",
-        )
-        return {
-            "notes": notes,
-            "has_more": False,
-            "cursor": "",
-        }
 
     async def get_notes_by_creator(
         self,
@@ -600,6 +605,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             "num": page_size,
             "cursor": cursor,
             "user_id": creator,
+            "image_formats": "jpg,webp,avif",
             "xsec_token": xsec_token,
             "xsec_source": xsec_source,
         }
@@ -628,28 +634,10 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         result = []
         notes_has_more = True
         notes_cursor = ""
-        page_count = 0
-        while (
-            notes_has_more
-            and len(result) < config.CRAWLER_MAX_NOTES_COUNT
-            and (config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES)
-        ):
-            try:
-                notes_res = await self.get_notes_by_creator(
-                    user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
-                )
-            except (RetryError, DataFetchError) as exc:
-                root_exc = exc.last_attempt.exception() if isinstance(exc, RetryError) else exc
-                utils.logger.warning(
-                    "[XiaoHongShuClient.get_all_notes_by_creator] user_posted API failed for user %s, fallback to creator HTML snapshot: %s",
-                    user_id,
-                    root_exc,
-                )
-                notes_res = await self.get_notes_by_creator_from_html(
-                    user_id=user_id,
-                    xsec_token=xsec_token,
-                    xsec_source=xsec_source,
-                )
+        while notes_has_more and len(result) < config.CRAWLER_MAX_NOTES_COUNT:
+            notes_res = await self.get_notes_by_creator(
+                user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
+            )
             if not notes_res:
                 utils.logger.error(
                     f"[XiaoHongShuClient.get_notes_by_creator] The current creator may have been banned by xhs, so they cannot access the data."
@@ -658,7 +646,6 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
 
             notes_has_more = notes_res.get("has_more", False)
             notes_cursor = notes_res.get("cursor", "")
-            page_count += 1
             if "notes" not in notes_res:
                 utils.logger.info(
                     f"[XiaoHongShuClient.get_all_notes_by_creator] No 'notes' key found in response: {notes_res}"
@@ -699,7 +686,13 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         data = {"original_url": f"{self._domain}/discovery/item/{note_id}"}
         return await self.post(uri, data=data, return_response=True)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(1))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(1),
+        retry=retry_if_not_exception_type(
+            (RetryError, IPBlockError, PlatformAccessError)
+        ),
+    )
     async def get_note_by_id_from_html(
         self,
         note_id: str,
@@ -721,7 +714,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
 
         """
         url = (
-            "https://www.xiaohongshu.com/explore/"
+            f"{self._domain}/explore/"
             + note_id
             + f"?xsec_token={xsec_token}&xsec_source={xsec_source}"
         )

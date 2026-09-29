@@ -25,7 +25,6 @@ from datetime import datetime
 from pathlib import Path
 
 from ..schemas import CrawlerStartRequest, LogEntry
-from .crawler_command import build_crawler_command
 
 
 class CrawlerManager:
@@ -205,22 +204,40 @@ class CrawlerManager:
 
     def _build_command(self, config: CrawlerStartRequest) -> list:
         """Build main.py command line arguments"""
-        return build_crawler_command(config)
+        cmd = ["uv", "run", "python", "main.py"]
 
-    async def wait(self) -> int:
-        """Wait for the current crawler process to exit and return the exit code."""
-        process = self.process
-        if not process:
-            return -1
+        cmd.extend(["--platform", config.platform.value])
+        cmd.extend(["--lt", config.login_type.value])
+        cmd.extend(["--type", config.crawler_type.value])
+        cmd.extend(["--save_data_option", config.save_option.value])
 
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, process.wait)
-        if self._read_task:
-            try:
-                await self._read_task
-            except asyncio.CancelledError:
-                pass
-        return process.returncode if process.returncode is not None else -1
+        # Pass different arguments based on crawler type
+        if config.crawler_type.value == "search" and config.keywords:
+            cmd.extend(["--keywords", config.keywords])
+        elif config.crawler_type.value == "detail" and config.specified_ids:
+            cmd.extend(["--specified_id", config.specified_ids])
+        elif config.crawler_type.value == "creator" and config.creator_ids:
+            cmd.extend(["--creator_id", config.creator_ids])
+
+        if config.start_page != 1:
+            cmd.extend(["--start", str(config.start_page)])
+
+        cmd.extend(["--get_comment", "true" if config.enable_comments else "false"])
+        cmd.extend(["--get_sub_comment", "true" if config.enable_sub_comments else "false"])
+        cmd.extend(["--get_media", "true" if config.enable_media else "false"])
+
+        if config.max_notes_count is not None:
+            cmd.extend(["--crawler_max_notes_count", str(config.max_notes_count)])
+
+        if config.max_comments_count is not None:
+            cmd.extend(["--max_comments_count_singlenotes", str(config.max_comments_count)])
+
+        if config.cookies:
+            cmd.extend(["--cookies", config.cookies])
+
+        cmd.extend(["--headless", "true" if config.headless else "false"])
+
+        return cmd
 
     async def _read_output(self):
         """Asynchronously read process output"""
