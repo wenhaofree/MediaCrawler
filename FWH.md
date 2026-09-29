@@ -32,7 +32,7 @@ ENABLE_GET_COMMENTS = False
 
 ## 3. 执行数据爬取
 
-使用 `uv` 运行爬虫脚本。以下示例演示了如何根据 `creator_id` 爬取抖音平台的数据：
+使用 `uv` 运行爬虫脚本。创作者采集使用 `--type creator`，关键词搜索使用 `--type search`。
 
 ```bash
 # 临时关闭代理的方式
@@ -49,14 +49,40 @@ uv run main.py --platform wb --lt qrcode --type creator --creator_id "5648162302
 
 uv run main.py --platform zhihu --lt qrcode --type creator --creator_id "morgancheng"
 
+# 闲鱼：当前 MVP 只支持关键词搜索商品，不支持 creator/detail/comment/media
+uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 30 --save_data_option jsonl
+
 ```
 
 **参数说明：**
 
-- `--platform dy`: 指定平台为抖音。
-- `--lt qrcode`: 登录方式为二维码。
-- `--type creator`: 爬取类型为创作者。
-- `--creator_id`: 目标创作者的具体 ID。
+- `--platform`: 指定平台，常用值：`dy` 抖音、`bili` B站、`xhs` 小红书、`wb` 微博、`zhihu` 知乎、`goofish` 闲鱼。
+- `--lt qrcode`: 登录方式为二维码；闲鱼搜索接口通常可直接搜索，遇到登录/风控时在 CDP 浏览器里手动处理。
+- `--type creator`: 爬取创作者主页数据。
+- `--type search`: 按关键词搜索；闲鱼当前只支持该模式。
+- `--creator_id`: 目标创作者 ID，支持多个 ID 用英文逗号分隔。
+- `--keywords`: 搜索关键词，多个关键词用英文逗号分隔。
+- `--crawler_max_notes_count`: 最大采集条数；闲鱼每页约 30 条，建议先从 30 或 60 开始。
+- `--save_data_option`: 保存方式，常用 `sqlite`、`jsonl`、`csv`、`excel`。
+
+### 闲鱼采集说明
+
+闲鱼使用 `goofish` 平台名，第一版只做商品搜索：
+
+```bash
+# SQLite 入库，后续可在 sqlite-viewer 里查看 goofish_item 表
+uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机" --crawler_max_notes_count 30 --save_data_option sqlite
+
+# JSONL 文件保存，适合快速验证
+uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 60 --save_data_option jsonl
+```
+
+注意：
+
+- 当前不支持 `--type creator`、`--type detail`、评论采集、二级评论和媒体下载。
+- 建议开启 Chrome CDP 后运行，沿用第 1 步的 `--remote-debugging-port=9222`。
+- 首次运行如果页面要求登录或安全验证，直接在弹出的 Chrome 窗口里完成，再重新执行命令。
+- SQLite 表名：`goofish_item`；JSONL 默认路径：`data/goofish/jsonl/search_contents_日期.jsonl`。
 
 ---
 
@@ -98,6 +124,9 @@ uv run main.py --platform zhihu --lt qrcode --type creator --max_pages 3 --creat
 
 # 小红书
 uv run main.py --platform xhs --lt qrcode --type creator --max_pages 3 --creator_id "640c29eb000000001001c91b,5b4e046811be1031e22f19d8"
+
+# 闲鱼：关键词搜索商品
+uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 60 --save_data_option sqlite
 ```
 
 ## 5. 采集列表统计：
@@ -183,6 +212,10 @@ uv run main.py --platform bili --lt qrcode --type creator --max_pages 3 --creato
 <!-- 微博 -->
 
 uv run main.py --platform wb --lt qrcode --type creator --max_pages 3 --creator_id "5648162302,1400854834,1660737882,1627825392,1727858283,6182606334"
+
+<!-- 闲鱼 -->
+
+uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 60 --save_data_option sqlite
 
 <!-- 启动服务 -->
 

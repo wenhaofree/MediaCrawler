@@ -182,6 +182,23 @@ class KuaishouVideoComment(Base):
     create_time = Column(BigInteger, comment='创建时间戳')
     sub_comment_count = Column(Text, comment='子评论数')
 
+class GoofishItem(Base):
+    __tablename__ = 'goofish_item'
+    id = Column(Integer, primary_key=True, comment='主键ID')
+    item_id = Column(String(128), nullable=False, index=True, unique=True, comment='商品ID')
+    title = Column(Text, comment='商品标题')
+    desc = Column(Text, comment='商品描述')
+    item_url = Column(Text, comment='商品URL')
+    price = Column(Text, comment='价格')
+    area = Column(Text, comment='地区')
+    image_url = Column(Text, comment='主图URL')
+    want_count = Column(Text, comment='想要人数')
+    user_nickname = Column(Text, comment='卖家脱敏昵称')
+    creator_hash = Column(String(64), index=True, comment='卖家匿名哈希')
+    source_keyword = Column(Text, default='', comment='来源关键词')
+    add_ts = Column(BigInteger, comment='添加时间戳')
+    last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
+
 class WeiboNote(Base):
     __tablename__ = 'weibo_note'
     id = Column(Integer, primary_key=True, comment='主键ID')

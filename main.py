@@ -39,6 +39,7 @@ from base.base_crawler import AbstractCrawler
 from media_platform.bilibili import BilibiliCrawler
 from media_platform.douyin import DouYinCrawler
 from media_platform.kuaishou import KuaishouCrawler
+from media_platform.goofish import GooFishCrawler
 from media_platform.tieba import TieBaCrawler
 from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
@@ -52,6 +53,7 @@ class CrawlerFactory:
         "xhs": XiaoHongShuCrawler,
         "dy": DouYinCrawler,
         "ks": KuaishouCrawler,
+        "goofish": GooFishCrawler,
         "bili": BilibiliCrawler,
         "wb": WeiboCrawler,
         "tieba": TieBaCrawler,
