@@ -389,10 +389,18 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             int,
             typer.Option(
                 "--qimai_rank_max_count",
-                help="Qimai rank max items, default 250",
+                help="Qimai rank max items. 0 means crawl all items loaded by scrolling",
                 rich_help_panel="Qimai Configuration",
             ),
         ] = config.QIMAI_RANK_MAX_COUNT,
+        qimai_crawl_interval_sec: Annotated[
+            int,
+            typer.Option(
+                "--qimai_crawl_interval_sec",
+                help="Qimai interval seconds between app detail/comment crawls",
+                rich_help_panel="Qimai Configuration",
+            ),
+        ] = config.QIMAI_CRAWL_INTERVAL_SEC,
     ) -> SimpleNamespace:
         """MediaCrawler 命令行入口"""
 
@@ -435,6 +443,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.QIMAI_RANK_DATE = qimai_rank_date
         config.QIMAI_RANK_GENRE = qimai_rank_genre
         config.QIMAI_RANK_MAX_COUNT = qimai_rank_max_count
+        config.QIMAI_CRAWL_INTERVAL_SEC = qimai_crawl_interval_sec
 
         # Set platform-specific ID lists for detail/creator mode
         if specified_id_list:
@@ -499,6 +508,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             qimai_rank_date=config.QIMAI_RANK_DATE,
             qimai_rank_genre=config.QIMAI_RANK_GENRE,
             qimai_rank_max_count=config.QIMAI_RANK_MAX_COUNT,
+            qimai_crawl_interval_sec=config.QIMAI_CRAWL_INTERVAL_SEC,
         )
 
     command = typer.main.get_command(app)

@@ -56,7 +56,9 @@ async def test_qimai_rank_cli_sets_rank_options():
             "--qimai_rank_genre",
             "6017",
             "--qimai_rank_max_count",
-            "250",
+            "0",
+            "--qimai_crawl_interval_sec",
+            "7",
         ]
     )
 
@@ -64,4 +66,5 @@ async def test_qimai_rank_cli_sets_rank_options():
     assert config.QIMAI_RANK_TYPE == "free"
     assert config.QIMAI_RANK_DATE == "2026-09-29"
     assert config.QIMAI_RANK_GENRE == "6017"
-    assert config.QIMAI_RANK_MAX_COUNT == 250
+    assert config.QIMAI_RANK_MAX_COUNT == 0
+    assert config.QIMAI_CRAWL_INTERVAL_SEC == 7

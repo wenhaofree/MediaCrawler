@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import random
 from typing import Dict, Optional
 
 from playwright.async_api import BrowserContext, BrowserType, Page, Playwright, async_playwright
@@ -102,7 +103,7 @@ class QimaiCrawler(AbstractCrawler):
                     config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
                 await qimai_store.batch_update_qimai_comments(comments)
-            await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+            await self._sleep_after_app(app_id)
 
     async def rank(self) -> None:
         source_keyword_var.set(
@@ -114,7 +115,34 @@ class QimaiCrawler(AbstractCrawler):
             config.QIMAI_RANK_GENRE,
             config.QIMAI_RANK_MAX_COUNT,
         )
-        await qimai_store.batch_update_qimai_apps(apps)
+        for app in apps:
+            detail_apps = await self.qimai_client.get_app_detail(app.app_id)
+            if detail_apps:
+                await qimai_store.batch_update_qimai_apps(
+                    [self._merge_rank_detail(app, detail_app) for detail_app in detail_apps]
+                )
+            else:
+                await qimai_store.update_qimai_app(app)
+            comments = await self.qimai_client.get_app_comments(
+                app.app_id,
+                config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+            )
+            await qimai_store.batch_update_qimai_comments(comments)
+            await self._sleep_after_app(app.app_id)
+
+    @staticmethod
+    def _merge_rank_detail(rank_app, detail_app):
+        data = rank_app.model_dump()
+        for key, value in detail_app.model_dump().items():
+            if value and not (key == "app_name" and value in {detail_app.app_id, "七麦数据"} and data.get("app_name")):
+                data[key] = value
+        return type(rank_app)(**data)
+
+    async def _sleep_after_app(self, app_id: str) -> None:
+        interval = max(config.CRAWLER_MAX_SLEEP_SEC, config.QIMAI_CRAWL_INTERVAL_SEC)
+        delay = interval + random.uniform(0, 1.5)
+        utils.logger.info(f"[QimaiCrawler.rank] app_id={app_id} sleeping {delay:.1f}s to avoid rate limits")
+        await asyncio.sleep(delay)
 
     async def launch_browser(
         self,

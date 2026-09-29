@@ -83,7 +83,7 @@ class QimaiExtractor:
         rating_value = ""
         for key, value in row.items():
             if "评分" in key:
-                rating_count = "".join(re.findall(r"\d+", key))
+                rating_count = cls._rating_count(key)
                 rating_value = str(value)
         return QimaiApp(
             app_id=app_id,
@@ -121,34 +121,45 @@ class QimaiExtractor:
 
     @classmethod
     def _to_comment(cls, row: Dict[str, Any], app_id: str) -> QimaiComment | None:
-        title = cls._pick(row, ("title", "comment_title", "commentTitle"))
-        content = cls._pick(row, ("content", "body", "comment", "commentContent"))
-        create_time = cls._pick(row, ("create_time", "createTime", "created_at", "date", "time"))
+        nested = row.get("content") if isinstance(row.get("content"), dict) else {}
+        title = cls._pick(row, ("title", "comment_title", "commentTitle")) or cls._pick(nested, ("title",))
+        content = cls._pick(row, ("content", "body", "comment", "commentContent")) or cls._pick(
+            nested, ("body", "content", "comment", "commentContent")
+        )
+        create_time = cls._pick(row, ("create_time", "createTime", "created_at", "date", "time")) or cls._pick(
+            nested, ("create_time", "createTime", "created_at", "date", "time")
+        )
         if not content:
             return None
-        nickname = cls._pick(row, ("user_nickname", "nickname", "author", "userName"))
+        nickname = cls._pick(row, ("user_nickname", "nickname", "author", "userName")) or cls._pick(
+            nested, ("user_nickname", "nickname", "author", "userName", "name")
+        )
         raw_id = cls._pick(row, ("user_id", "userId", "author_id")) or nickname
-        comment_id = cls._pick(row, ("comment_id", "commentId", "id")) or cls._comment_hash(
+        comment_id = (
+            cls._pick(row, ("comment_id", "commentId"))
+            or cls._pick(nested, ("user_review_id", "comment_id", "commentId", "id"))
+            or cls._pick(row, ("user_review_id", "id"))
+        ) or cls._comment_hash(
             app_id, title, content, create_time, raw_id
         )
         return QimaiComment(
             comment_id=comment_id,
             app_id=app_id,
-            rating=cls._pick(row, ("rating", "star", "score")),
+            rating=cls._pick(row, ("rating", "star", "score")) or cls._pick(nested, ("rating", "star", "score")),
             title=title,
             content=content,
             user_nickname=mask_nickname(nickname),
             creator_hash=anonymize_user_id(raw_id),
             create_time=create_time,
-            developer_reply=cls._pick(row, ("developer_reply", "reply")),
-            is_deleted=cls._pick(row, ("is_deleted", "deleted")),
+            developer_reply=cls._pick(row, ("developer_reply", "reply")) or cls._pick(nested, ("response_text", "reply")),
+            is_deleted=cls._pick(row, ("is_deleted", "deleted")) or cls._pick(nested, ("delStatus", "deleted")),
         )
 
     @staticmethod
     def _pick(row: Dict[str, Any], keys: Iterable[str]) -> str:
         for key in keys:
             value = row.get(key)
-            if value is not None and value != "":
+            if value is not None and value != "" and not isinstance(value, (dict, list)):
                 return str(value)
         return ""
 
@@ -158,6 +169,13 @@ class QimaiExtractor:
             if "第" in str(value) and "名" in str(value):
                 return str(value)
         return ""
+
+    @staticmethod
+    def _rating_count(text: str) -> str:
+        match = re.search(r"(\d+(?:\.\d+)?)\s*万", text)
+        if match:
+            return str(int(float(match.group(1)) * 10000))
+        return "".join(re.findall(r"\d+", text))
 
     @staticmethod
     def _comment_hash(*parts: str) -> str:

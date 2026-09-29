@@ -57,9 +57,9 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小
 
 uv run main.py --platform qimai --lt qrcode --type detail --specified_id "977946724" --get_comment true --max_comments_count_singlenotes 20 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 
 ```
 
@@ -80,7 +80,8 @@ uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid -
 - `--qimai_rank_type`: 七麦榜单类型，常用 `free`、`paid`、`grossing`。
 - `--qimai_rank_date`: 七麦榜单日期，格式如 `2026-09-29`；留空取页面默认最新。
 - `--qimai_rank_genre`: 七麦榜单分类 ID，例如教育分类 `6017`。
-- `--qimai_rank_max_count`: 七麦榜单最大采集条数，默认 `250`；程序会下滑分页补齐。
+- `--qimai_rank_max_count`: 七麦榜单最大采集条数，默认 `0` 表示全量；程序会下滑分页直到没有新数据。
+- `--qimai_crawl_interval_sec`: 七麦逐个 App 详情/评论采集的最小间隔，默认 `5` 秒；实际会额外加少量随机等待，降低风控风险。
 - `--save_data_option`: 保存方式，常用 `sqlite`、`jsonl`、`csv`、`excel`。
 
 ### 闲鱼采集说明
@@ -117,7 +118,7 @@ uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478
 uv run main.py --platform qimai --lt qrcode --type detail --specified_id "977946724" --get_comment true --max_comments_count_singlenotes 40 --save_data_option sqlite
 
 # 采集榜单：类型 + 日期 + 子分类
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 
 # 快速验证 JSONL
 uv run main.py --platform qimai --lt qrcode --type search --keywords "微信" --crawler_max_notes_count 20 --save_data_option jsonl
@@ -126,6 +127,8 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信" --
 注意：
 
 - 建议使用第 1 步的 Chrome CDP 模式；七麦依赖真实浏览器页面触发接口。
+- 榜单模式会先下滑采完整榜单，再逐个进入 App 详情页采详情和评论。
+- 详情/评论采集优先使用七麦前端 SPA 路由切换触发接口，避免每个 App 都整页刷新；失败时才回退到普通页面跳转。
 - 当前不支持 `--type creator`、历史趋势、媒体下载。
 - 七麦账号权限决定能看到多少数据；如遇登录、滑块或频控，在 Chrome 窗口里人工处理后降低采集量重试。
 - SQLite 表名：App/榜单写入 `qimai_app`，评论写入 `qimai_comment`；JSONL 默认路径：`data/qimai/jsonl/*_contents_日期.jsonl` 和 `*_comments_日期.jsonl`。
@@ -179,11 +182,11 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小
 
 uv run main.py --platform qimai --lt qrcode --type detail --specified_id "977946724" --get_comment true --max_comments_count_singlenotes 20 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type grossing --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type grossing --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 ```
 
 ## 5. 采集列表统计：
@@ -280,7 +283,7 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小
 
 uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478124" --get_comment true --max_comments_count_singlenotes 20 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --save_data_option sqlite
 
 <!-- 启动服务 -->
 
