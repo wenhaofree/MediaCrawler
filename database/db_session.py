@@ -74,6 +74,49 @@ def get_async_engine(db_type: str = None):
     return engine
 
 
+def _migrate_missing_columns(sync_conn):
+    """
+    Automatically migrate missing columns from ORM models to existing database tables.
+    This ensures backward compatibility when new columns are added to models.
+    """
+    from sqlalchemy import inspect
+    inspector = inspect(sync_conn)
+    existing_tables = set(inspector.get_table_names())
+
+    for table_name, table in Base.metadata.tables.items():
+        if table_name not in existing_tables:
+            continue
+        existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+        for column in table.columns:
+            if column.name not in existing_cols:
+                col_type = column.type.compile(sync_conn.dialect)
+                default_clause = ""
+                if column.server_default is not None:
+                    default_clause = f" DEFAULT {column.server_default.arg}"
+                elif column.default is not None and column.default.is_scalar:
+                    val = column.default.arg
+                    if isinstance(val, str):
+                        default_clause = f" DEFAULT '{val}'"
+                    elif val is not None:
+                        default_clause = f" DEFAULT {val}"
+                elif not column.nullable:
+                    default_clause = " DEFAULT ''"
+
+                null_clause = " NOT NULL" if (not column.nullable and default_clause) else ""
+                sql = f'ALTER TABLE "{table_name}" ADD COLUMN "{column.name}" {col_type}{default_clause}{null_clause}'
+                try:
+                    sync_conn.execute(text(sql))
+                except Exception:
+                    pass
+
+                if column.index:
+                    idx_sql = f'CREATE INDEX IF NOT EXISTS "ix_{table_name}_{column.name}" ON "{table_name}" ("{column.name}")'
+                    try:
+                        sync_conn.execute(text(idx_sql))
+                    except Exception:
+                        pass
+
+
 async def create_tables(db_type: str = None):
     if db_type is None:
         db_type = config.SAVE_DATA_OPTION
@@ -82,6 +125,7 @@ async def create_tables(db_type: str = None):
     if engine:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            await conn.run_sync(_migrate_missing_columns)
 
 
 @asynccontextmanager

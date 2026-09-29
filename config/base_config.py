@@ -62,6 +62,11 @@ ENABLE_CDP_MODE = True
 # 如果端口被占用，系统会自动尝试下一个可用端口
 CDP_DEBUG_PORT = 9222
 
+# Attach-only mode for CDP.
+# When enabled, MediaCrawler must attach to an existing browser on CDP_DEBUG_PORT.
+# If no reusable browser is available, the task fails instead of launching a new browser.
+CDP_ATTACH_ONLY = False
+
 # 自定义浏览器路径（可选）
 # 如果为空，系统会自动检测 Chrome/Edge 的安装路径
 # Windows 示例: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
@@ -87,7 +92,7 @@ CDP_CONNECT_EXISTING = True
 AUTO_CLOSE_BROWSER = True
 
 # Data saving type option configuration, supports: csv, db, json, jsonl, sqlite, excel, postgres. It is best to save to DB, with deduplication function.
-SAVE_DATA_OPTION = "jsonl"  # csv or db or json or jsonl or sqlite or excel or postgres
+SAVE_DATA_OPTION = "sqlite"  # csv or db or json or jsonl or sqlite or excel or postgres
 
 # Data saving path, if not specified by default, it will be saved to the data folder.
 SAVE_DATA_PATH = ""
@@ -101,6 +106,10 @@ START_PAGE = 1
 # Control the number of crawled videos/posts
 CRAWLER_MAX_NOTES_COUNT = 15
 
+# Maximum number of pages to crawl in creator mode.
+# 0 means unlimited and keeps the historical behavior.
+CRAWLER_MAX_PAGES = 0
+
 # Controlling the number of concurrent crawlers
 MAX_CONCURRENCY_NUM = 1
 
@@ -111,7 +120,7 @@ MAX_CONCURRENCY_NUM = 1
 ENABLE_GET_MEDIA = False
 
 # Whether to enable comment crawling mode. Comment crawling is enabled by default.
-ENABLE_GET_COMMENTS = True
+ENABLE_GET_COMMENTS = False
 
 # Control the number of crawled first-level comments (single video/post)
 CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10

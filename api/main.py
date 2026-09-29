@@ -89,6 +89,9 @@ async def serve_frontend():
     index_path = os.path.join(WEBUI_DIR, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
+    root_webui_index = PROJECT_ROOT / "webui" / "index.html"
+    if root_webui_index.exists():
+        return FileResponse(root_webui_index)
     return {
         "message": "MediaCrawler WebUI API",
         "version": "1.0.0",

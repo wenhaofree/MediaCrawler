@@ -74,7 +74,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         else:
             self._host = "https://edith.xiaohongshu.com"
             self._domain = "https://www.xiaohongshu.com"
-        self.cookie_urls = [self._domain]
+        self.cookie_urls = [self._domain, self._host]
         self.IP_ERROR_STR = "Network connection error, please check network settings or restart"
         self.IP_ERROR_CODE = 300012
         self.SECURITY_LIMIT_CODE = 300011
@@ -634,10 +634,28 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         result = []
         notes_has_more = True
         notes_cursor = ""
-        while notes_has_more and len(result) < config.CRAWLER_MAX_NOTES_COUNT:
-            notes_res = await self.get_notes_by_creator(
-                user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
-            )
+        page_count = 0
+        while (
+            notes_has_more
+            and len(result) < config.CRAWLER_MAX_NOTES_COUNT
+            and (config.CRAWLER_MAX_PAGES <= 0 or page_count < config.CRAWLER_MAX_PAGES)
+        ):
+            try:
+                notes_res = await self.get_notes_by_creator(
+                    user_id, notes_cursor, xsec_token=xsec_token, xsec_source=xsec_source
+                )
+            except (RetryError, DataFetchError) as exc:
+                root_exc = exc.last_attempt.exception() if isinstance(exc, RetryError) else exc
+                utils.logger.warning(
+                    "[XiaoHongShuClient.get_all_notes_by_creator] user_posted API failed for user %s, fallback to creator HTML snapshot: %s",
+                    user_id,
+                    root_exc,
+                )
+                notes_res = await self.get_notes_by_creator_from_html(
+                    user_id=user_id,
+                    xsec_token=xsec_token,
+                    xsec_source=xsec_source,
+                )
             if not notes_res:
                 utils.logger.error(
                     f"[XiaoHongShuClient.get_notes_by_creator] The current creator may have been banned by xhs, so they cannot access the data."
@@ -646,6 +664,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
 
             notes_has_more = notes_res.get("has_more", False)
             notes_cursor = notes_res.get("cursor", "")
+            page_count += 1
             if "notes" not in notes_res:
                 utils.logger.info(
                     f"[XiaoHongShuClient.get_all_notes_by_creator] No 'notes' key found in response: {notes_res}"

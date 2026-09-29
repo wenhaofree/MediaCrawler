@@ -163,3 +163,50 @@ async def test_bilibili_creator_crawl_respects_max_pages(monkeypatch):
 
     assert [item[1] for item in page_calls] == [1, 2]
     assert fetched_bvids == [["BV1"], ["BV2"]]
+
+
+@pytest.mark.asyncio
+async def test_parse_cmd_max_pages(monkeypatch):
+    monkeypatch.setattr(config, "CRAWLER_MAX_PAGES", 0)
+    from cmd_arg import parse_cmd
+
+    args = await parse_cmd(
+        [
+            "--platform",
+            "bili",
+            "--lt",
+            "qrcode",
+            "--type",
+            "creator",
+            "--creator_id",
+            "625267185",
+            "--max_pages",
+            "1",
+        ]
+    )
+
+    assert args.max_pages == 1
+    assert config.CRAWLER_MAX_PAGES == 1
+    assert config.BILI_CREATOR_ID_LIST == ["625267185"]
+
+
+@pytest.mark.asyncio
+async def test_parse_cmd_max_pages_default(monkeypatch):
+    monkeypatch.setattr(config, "CRAWLER_MAX_PAGES", 0)
+    from cmd_arg import parse_cmd
+
+    args = await parse_cmd(
+        [
+            "--platform",
+            "bili",
+            "--lt",
+            "qrcode",
+            "--type",
+            "creator",
+            "--creator_id",
+            "625267185",
+        ]
+    )
+
+    assert args.max_pages == 0
+    assert config.CRAWLER_MAX_PAGES == 0

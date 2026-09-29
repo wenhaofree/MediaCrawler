@@ -70,6 +70,7 @@ async def test_douyin_fetch_creator_video_detail_skips_failed_detail_tasks(monke
 
     crawler.get_aweme_detail = fake_get_aweme_detail  # type: ignore[method-assign]
     crawler.get_aweme_media = fake_get_aweme_media  # type: ignore[method-assign]
+    crawler.download_media = fake_get_aweme_media  # type: ignore[method-assign]
     monkeypatch.setattr(
         douyin_core_module.douyin_store,
         "update_douyin_aweme",

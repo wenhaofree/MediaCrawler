@@ -62,8 +62,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
     cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self) -> None:
-        self.index_url = "https://www.rednote.com" if config.XHS_INTERNATIONAL else "https://www.xiaohongshu.com"
-        self.cookie_urls = [self.index_url]
+        if config.XHS_INTERNATIONAL:
+            self.index_url = "https://www.rednote.com"
+            self.cookie_urls = [self.index_url, "https://webapi.rednote.com"]
+        else:
+            self.index_url = "https://www.xiaohongshu.com"
+            self.cookie_urls = [self.index_url, "https://edith.xiaohongshu.com"]
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         self.cdp_manager = None

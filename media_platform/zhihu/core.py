@@ -57,7 +57,7 @@ class ZhihuCrawler(AbstractCrawler):
 
     def __init__(self) -> None:
         self.index_url = "https://www.zhihu.com"
-        self.cookie_urls = [self.index_url]
+        self.cookie_urls = [self.index_url, "https://zhuanlan.zhihu.com"]
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         self._extractor = ZhihuExtractor()

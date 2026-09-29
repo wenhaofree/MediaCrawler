@@ -232,12 +232,33 @@ class CrawlerManager:
         if config.max_comments_count is not None:
             cmd.extend(["--max_comments_count_singlenotes", str(config.max_comments_count)])
 
+        if getattr(config, "max_pages", 0) and config.max_pages > 0:
+            cmd.extend(["--max_pages", str(config.max_pages)])
+
+        if getattr(config, "cdp_attach_only", False):
+            cmd.extend(["--cdp_attach_only", "true"])
+
         if config.cookies:
             cmd.extend(["--cookies", config.cookies])
 
         cmd.extend(["--headless", "true" if config.headless else "false"])
 
         return cmd
+
+    async def wait(self) -> int:
+        """Wait for the current crawler process to exit and return the exit code."""
+        process = self.process
+        if not process:
+            return -1
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, process.wait)
+        if self._read_task:
+            try:
+                await self._read_task
+            except asyncio.CancelledError:
+                pass
+        return process.returncode if process.returncode is not None else -1
 
     async def _read_output(self):
         """Asynchronously read process output"""
