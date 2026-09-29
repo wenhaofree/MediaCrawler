@@ -193,6 +193,8 @@ class GoofishItem(Base):
     area = Column(Text, comment='地区')
     image_url = Column(Text, comment='主图URL')
     want_count = Column(Text, comment='想要人数')
+    browse_count = Column(Text, comment='浏览量')
+    publish_time = Column(Text, comment='发布时间')
     user_nickname = Column(Text, comment='卖家脱敏昵称')
     creator_hash = Column(String(64), index=True, comment='卖家匿名哈希')
     source_keyword = Column(Text, default='', comment='来源关键词')

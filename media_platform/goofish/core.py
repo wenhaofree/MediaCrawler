@@ -95,7 +95,10 @@ class GooFishCrawler(AbstractCrawler):
                 items = await self.goofish_client.search_items(keyword, page, page_size)
                 if not items:
                     break
-                await goofish_store.batch_update_goofish_items(items)
+                detail_items = []
+                for item in items:
+                    detail_items.append(await self.goofish_client.enrich_item_detail(item))
+                await goofish_store.batch_update_goofish_items(detail_items)
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 page += 1
 

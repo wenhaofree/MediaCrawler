@@ -45,6 +45,10 @@ class GooFishClient(AbstractApiClient):
                 f"{self._host}/search?q={quote(keyword)}",
                 wait_until="domcontentloaded",
             )
+        try:
+            await self.playwright_page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            await self.playwright_page.wait_for_timeout(1000)
 
     async def search_items(self, keyword: str, page: int, page_size: int = 30) -> List[GoofishItem]:
         await self.ensure_search_page(keyword)
@@ -62,6 +66,38 @@ class GooFishClient(AbstractApiClient):
                     f"[GooFishClient.search_items] {api} returned {len(result_list)} rows but extractor parsed 0 items"
                 )
         return []
+
+    async def enrich_item_detail(self, item: GoofishItem) -> GoofishItem:
+        if not item.item_url:
+            return item
+        try:
+            await self.playwright_page.goto(item.item_url, wait_until="domcontentloaded")
+            try:
+                await self.playwright_page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                await self.playwright_page.wait_for_timeout(1500)
+            detail = await self.playwright_page.evaluate(
+                """() => {
+                    const clean = value => String(value || "").replace(/\\s+/g, " ").trim();
+                    const text = clean(document.body ? document.body.innerText : "");
+                    const wantBox = Array.from(document.querySelectorAll("div")).find(el => /人想要/.test(el.innerText || "") && /浏览/.test(el.innerText || ""));
+                    const source = clean((wantBox && wantBox.innerText) || text);
+                    const want = source.match(/([\\d.]+\\s*万?\\s*人想要)/);
+                    const browse = source.match(/([\\d.]+\\s*万?\\s*浏览)/);
+                    const publish = text.match(/(?:发布于|发布时间|编辑于)\\s*[:：]?\\s*([^\\s，。|]+(?:\\s+\\d{1,2}:\\d{2})?)/);
+                    return {
+                        want_count: want ? clean(want[1]) : "",
+                        browse_count: browse ? clean(browse[1]) : "",
+                        publish_time: publish ? clean(publish[1]) : "",
+                    };
+                }"""
+            )
+            item.want_count = detail.get("want_count") or item.want_count
+            item.browse_count = detail.get("browse_count") or item.browse_count
+            item.publish_time = detail.get("publish_time") or item.publish_time
+        except Exception as exc:
+            utils.logger.warning(f"[GooFishClient.enrich_item_detail] detail failed item_id={item.item_id}: {exc}")
+        return item
 
     async def _request_search_api(
         self,
@@ -91,8 +127,7 @@ class GooFishClient(AbstractApiClient):
                 "searchReqFromPage": "pcSearch",
             },
         }
-        result = await self.playwright_page.evaluate(
-            """async ({ payload, timeoutMs }) => {
+        script = """async ({ payload, timeoutMs }) => {
                 const waitForMtop = deadline => new Promise(resolve => {
                     const tick = () => {
                         if (window.lib && window.lib.mtop && window.lib.mtop.request) return resolve(true);
@@ -111,9 +146,20 @@ class GooFishClient(AbstractApiClient):
                     const message = err && (err.message || err.msg || err.ret || err.code || err.error);
                     return { ok: false, message: message ? String(message) : JSON.stringify(err || {}) };
                 }
-            }""",
-            {"payload": payload, "timeoutMs": self.timeout * 1000},
-        )
+            }"""
+        result = {}
+        for attempt in range(2):
+            try:
+                result = await self.playwright_page.evaluate(
+                    script,
+                    {"payload": payload, "timeoutMs": self.timeout * 1000},
+                )
+                break
+            except Exception as exc:
+                if attempt == 1:
+                    utils.logger.warning(f"[GooFishClient._request_search_api] {api} evaluate failed: {exc}")
+                    return {}
+                await self.playwright_page.wait_for_timeout(1000)
         if not result.get("ok"):
             utils.logger.warning(f"[GooFishClient._request_search_api] {api} failed: {result.get('message')}")
             return {}
