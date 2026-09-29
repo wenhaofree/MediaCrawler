@@ -6,7 +6,7 @@ from urllib.parse import quote
 from playwright.async_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError
 
 from base.base_crawler import AbstractApiClient
-from model.m_qimai import QimaiApp
+from model.m_qimai import QimaiApp, QimaiComment
 from tools import utils
 
 from .help import QimaiExtractor
@@ -34,9 +34,58 @@ class QimaiClient(AbstractApiClient):
 
     async def get_app_detail(self, app_id: str) -> List[QimaiApp]:
         url = f"https://www.qimai.cn/app/baseinfo/appid/{quote(app_id)}/country/cn"
-        return await self._goto_and_extract(url, "/app/baseinfo")
+        payload = await self._goto_and_payload(url, "/app/baseinfo")
+        apps = QimaiExtractor.extract_apps(payload)
+        detail_app = QimaiExtractor.app_from_detail_dom(await self._extract_detail_dom(app_id))
+        return QimaiExtractor.merge_apps(apps, detail_app)
+
+    async def get_app_comments(self, app_id: str, max_count: int) -> List[QimaiComment]:
+        url = f"https://www.qimai.cn/app/comment/appid/{quote(app_id)}/country/cn"
+        payload = await self._goto_and_payload(url, "/app/comment")
+        comments = QimaiExtractor.extract_comments(payload, app_id)
+        seen = {comment.comment_id for comment in comments}
+        while len(comments) < max_count:
+            rows = await self._extract_comment_rows(app_id, max_count - len(comments))
+            new_comments = [
+                comment
+                for comment in QimaiExtractor.comments_from_dom_rows(rows, app_id)
+                if comment.comment_id not in seen
+            ]
+            comments.extend(new_comments)
+            seen.update(comment.comment_id for comment in new_comments)
+            if len(comments) >= max_count or not await self._next_comment_page():
+                break
+        return comments[:max_count]
+
+    async def get_rank_apps(
+        self,
+        rank_type: str,
+        rank_date: str,
+        rank_genre: str,
+        max_count: int = 250,
+    ) -> List[QimaiApp]:
+        url = f"https://www.qimai.cn/rank/index/brand/{quote(rank_type)}/genre/{quote(rank_genre)}/device/iphone/country/cn"
+        if rank_date:
+            url = f"{url}/date/{quote(rank_date)}"
+        apps = self._mark_rank(await self._goto_and_extract(url, "/rank/index"), rank_type, rank_date, rank_genre)
+        seen = {app.app_id for app in apps}
+        while len(apps) < max_count:
+            payload = await self._scroll_for_payload("/rank/index")
+            if not payload:
+                break
+            before = len(apps)
+            for app in self._mark_rank(QimaiExtractor.extract_apps(payload), rank_type, rank_date, rank_genre):
+                if app.app_id not in seen:
+                    apps.append(app)
+                    seen.add(app.app_id)
+            if len(apps) == before:
+                break
+        return apps[:max_count]
 
     async def _goto_and_extract(self, url: str, api_path: str) -> List[QimaiApp]:
+        return QimaiExtractor.extract_apps(await self._goto_and_payload(url, api_path))
+
+    async def _goto_and_payload(self, url: str, api_path: str) -> Dict:
         try:
             async with self.playwright_page.expect_response(
                 lambda response: "api.qimai.cn" in response.url and api_path in response.url,
@@ -46,9 +95,94 @@ class QimaiClient(AbstractApiClient):
             response = await response_info.value
             payload = await response.json()
         except PlaywrightTimeoutError:
-            utils.logger.warning(f"[QimaiClient._goto_and_extract] timeout waiting for {api_path}: {url}")
-            return []
+            utils.logger.warning(f"[QimaiClient._goto_and_payload] timeout waiting for {api_path}: {url}")
+            return {}
         except Exception as exc:
-            utils.logger.warning(f"[QimaiClient._goto_and_extract] failed url={url}: {exc}")
+            utils.logger.warning(f"[QimaiClient._goto_and_payload] failed url={url}: {exc}")
+            return {}
+        return payload
+
+    async def _scroll_for_payload(self, api_path: str) -> Dict:
+        script = """() => {
+            window.scrollTo(0, document.body.scrollHeight);
+            for (const el of document.querySelectorAll("*")) {
+                if (el.scrollHeight > el.clientHeight + 100) el.scrollTop = el.scrollHeight;
+            }
+        }"""
+        try:
+            async with self.playwright_page.expect_response(
+                lambda response: "api.qimai.cn" in response.url and api_path in response.url,
+                timeout=8000,
+            ) as response_info:
+                await self.playwright_page.evaluate(script)
+            return await (await response_info.value).json()
+        except PlaywrightTimeoutError:
+            return {}
+        except Exception as exc:
+            utils.logger.warning(f"[QimaiClient._scroll_for_payload] failed api_path={api_path}: {exc}")
+            return {}
+
+    @staticmethod
+    def _mark_rank(apps: List[QimaiApp], rank_type: str, rank_date: str, rank_genre: str) -> List[QimaiApp]:
+        for app in apps:
+            app.rank_type = rank_type
+            app.rank_date = rank_date
+            app.rank_genre = rank_genre
+        return apps
+
+    async def _extract_detail_dom(self, app_id: str) -> Dict:
+        script = """(appId) => {
+            const text = el => (el && el.innerText || "").replace(/\\s+/g, " ").trim();
+            const info = document.querySelector(".app-info");
+            const data = { app_id: appId };
+            const name = text(document.querySelector(".app-name, h1"));
+            if (name) data.app_name = name;
+            if (!info) return data;
+            for (const item of info.querySelectorAll(":scope > div")) {
+                const type = text(item.querySelector(".type"));
+                const value = text(item.querySelector(".value"));
+                if (!type || !value) continue;
+                const rating = item.querySelector(".value.rating input")?.value;
+                data[type] = rating || value;
+            }
+            return data;
+        }"""
+        try:
+            return await self.playwright_page.evaluate(script, app_id)
+        except Exception as exc:
+            utils.logger.warning(f"[QimaiClient._extract_detail_dom] failed app_id={app_id}: {exc}")
+            return {"app_id": app_id}
+
+    async def _extract_comment_rows(self, app_id: str, limit: int) -> List[Dict]:
+        script = """({ appId, limit }) => {
+            const text = el => (el && el.innerText || "").replace(/\\s+/g, " ").trim();
+            return Array.from(document.querySelectorAll(".comment-details .ivu-table-body tbody tr"))
+                .slice(0, limit)
+                .map((row, index) => {
+                    const deleted = row.querySelector(".comment-txt p.title i");
+                    return {
+                        app_id: appId,
+                        rating: row.querySelector(".ivu-rate input")?.value || "",
+                        title: text(row.querySelector(".comment-txt p.title > span:first-child")),
+                        user_nickname: text(row.querySelector(".comment-txt .author a")),
+                        content: text(row.querySelector('.comment-txt .body span[class^="comment-"]:not([class^="comment-dev-"])')),
+                        create_time: text(row.querySelector("td:nth-child(3) span")),
+                        developer_reply: text(row.querySelector(".developer-box .body")),
+                        is_deleted: deleted && getComputedStyle(deleted).display !== "none" ? "1" : "0",
+                        comment_id: `${appId}-${index}-${text(row.querySelector("td:nth-child(3) span"))}-${text(row.querySelector(".comment-txt p.title > span:first-child"))}`,
+                    };
+                });
+        }"""
+        try:
+            return await self.playwright_page.evaluate(script, {"appId": app_id, "limit": limit})
+        except Exception as exc:
+            utils.logger.warning(f"[QimaiClient._extract_comment_rows] failed app_id={app_id}: {exc}")
             return []
-        return QimaiExtractor.extract_apps(payload)
+
+    async def _next_comment_page(self) -> bool:
+        next_page = self.playwright_page.locator(".comment-details .ivu-page-next:not(.ivu-page-disabled)").first
+        if await next_page.count() == 0:
+            return False
+        await next_page.click()
+        await self.playwright_page.wait_for_timeout(1200)
+        return True

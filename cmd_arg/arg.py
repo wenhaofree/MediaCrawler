@@ -65,6 +65,7 @@ class CrawlerTypeEnum(str, Enum):
     SEARCH = "search"
     DETAIL = "detail"
     CREATOR = "creator"
+    RANK = "rank"
 
 
 class SaveDataOptionEnum(str, Enum):
@@ -180,7 +181,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             CrawlerTypeEnum,
             typer.Option(
                 "--type",
-                help="Crawler type (search=Search | detail=Detail | creator=Creator)",
+                help="Crawler type (search=Search | detail=Detail | creator=Creator | rank=Rank)",
                 rich_help_panel="Basic Configuration",
             ),
         ] = _coerce_enum(CrawlerTypeEnum, config.CRAWLER_TYPE, CrawlerTypeEnum.SEARCH),
@@ -360,6 +361,38 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 show_default=True,
             ),
         ] = str(config.CDP_ATTACH_ONLY),
+        qimai_rank_type: Annotated[
+            str,
+            typer.Option(
+                "--qimai_rank_type",
+                help="Qimai rank type, for example free | paid | grossing",
+                rich_help_panel="Qimai Configuration",
+            ),
+        ] = config.QIMAI_RANK_TYPE,
+        qimai_rank_date: Annotated[
+            str,
+            typer.Option(
+                "--qimai_rank_date",
+                help="Qimai rank date, for example 2026-09-29. Empty means latest",
+                rich_help_panel="Qimai Configuration",
+            ),
+        ] = config.QIMAI_RANK_DATE,
+        qimai_rank_genre: Annotated[
+            str,
+            typer.Option(
+                "--qimai_rank_genre",
+                help="Qimai rank genre/category ID, for example 6017",
+                rich_help_panel="Qimai Configuration",
+            ),
+        ] = config.QIMAI_RANK_GENRE,
+        qimai_rank_max_count: Annotated[
+            int,
+            typer.Option(
+                "--qimai_rank_max_count",
+                help="Qimai rank max items, default 250",
+                rich_help_panel="Qimai Configuration",
+            ),
+        ] = config.QIMAI_RANK_MAX_COUNT,
     ) -> SimpleNamespace:
         """MediaCrawler 命令行入口"""
 
@@ -398,6 +431,10 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.IP_PROXY_PROVIDER_NAME = ip_proxy_provider_name
         config.STATIC_PROXY_URL = static_proxy_url
         config.CDP_ATTACH_ONLY = enable_cdp_attach_only
+        config.QIMAI_RANK_TYPE = qimai_rank_type
+        config.QIMAI_RANK_DATE = qimai_rank_date
+        config.QIMAI_RANK_GENRE = qimai_rank_genre
+        config.QIMAI_RANK_MAX_COUNT = qimai_rank_max_count
 
         # Set platform-specific ID lists for detail/creator mode
         if specified_id_list:
@@ -458,6 +495,10 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             creator_id=creator_id,
             max_pages=config.CRAWLER_MAX_PAGES,
             cdp_attach_only=config.CDP_ATTACH_ONLY,
+            qimai_rank_type=config.QIMAI_RANK_TYPE,
+            qimai_rank_date=config.QIMAI_RANK_DATE,
+            qimai_rank_genre=config.QIMAI_RANK_GENRE,
+            qimai_rank_max_count=config.QIMAI_RANK_MAX_COUNT,
         )
 
     command = typer.main.get_command(app)

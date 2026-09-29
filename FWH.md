@@ -52,10 +52,14 @@ uv run main.py --platform zhihu --lt qrcode --type creator --creator_id "morganc
 # 闲鱼：当前 MVP 只支持关键词搜索商品，不支持 creator/detail/comment/media
 uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 30 --save_data_option jsonl
 
-# 七麦：当前 MVP 支持关键词搜索 App 和指定 App ID 详情
+# 七麦：支持关键词搜索、指定 App ID 详情/评论、榜单
 uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小红书" --crawler_max_notes_count 20 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478124" --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type detail --specified_id "977946724" --get_comment true --max_comments_count_singlenotes 20 --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
 
 ```
 
@@ -66,10 +70,17 @@ uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478
 - `--type creator`: 爬取创作者主页数据。
 - `--type search`: 按关键词搜索；闲鱼当前只支持该模式，七麦用于搜索 App。
 - `--type detail`: 按指定内容 ID 采集详情；七麦传 App ID。
+- `--type rank`: 七麦榜单采集。
 - `--creator_id`: 目标创作者 ID，支持多个 ID 用英文逗号分隔。
 - `--specified_id`: 详情页 ID，七麦填写 App ID，多个 ID 用英文逗号分隔。
 - `--keywords`: 搜索关键词，多个关键词用英文逗号分隔。
 - `--crawler_max_notes_count`: 最大采集条数；闲鱼每页约 30 条，七麦建议先从 20 或 50 开始。
+- `--get_comment true`: 七麦详情模式下同步采集评论。
+- `--max_comments_count_singlenotes`: 七麦单个 App 最大评论条数。
+- `--qimai_rank_type`: 七麦榜单类型，常用 `free`、`paid`、`grossing`。
+- `--qimai_rank_date`: 七麦榜单日期，格式如 `2026-09-29`；留空取页面默认最新。
+- `--qimai_rank_genre`: 七麦榜单分类 ID，例如教育分类 `6017`。
+- `--qimai_rank_max_count`: 七麦榜单最大采集条数，默认 `250`；程序会下滑分页补齐。
 - `--save_data_option`: 保存方式，常用 `sqlite`、`jsonl`、`csv`、`excel`。
 
 ### 闲鱼采集说明
@@ -93,7 +104,7 @@ uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,�
 
 ### 七麦采集说明
 
-七麦使用 `qimai` 平台名，第一版只做 App 搜索和基础详情。实现方式是打开真实七麦页面，让网页自己发起接口请求，程序只截获 `api.qimai.cn` 返回的 JSON，不维护 `analysis` 签名逆向逻辑。
+七麦使用 `qimai` 平台名，支持 App 搜索、基础详情、评论和榜单。实现方式是打开真实七麦页面，让网页自己发起接口请求，程序优先截获 `api.qimai.cn` 返回的 JSON；详情和评论会额外读取页面 DOM 中已经渲染的数据，不维护 `analysis` 签名逆向逻辑。
 
 ```bash
 # 搜索 App 并入库
@@ -102,6 +113,12 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小
 # 采集指定 App ID 的基础详情
 uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478124,333206289" --save_data_option sqlite
 
+# 采集详情并同步采集评论，评论会写入 qimai_comment 表
+uv run main.py --platform qimai --lt qrcode --type detail --specified_id "977946724" --get_comment true --max_comments_count_singlenotes 40 --save_data_option sqlite
+
+# 采集榜单：类型 + 日期 + 子分类
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+
 # 快速验证 JSONL
 uv run main.py --platform qimai --lt qrcode --type search --keywords "微信" --crawler_max_notes_count 20 --save_data_option jsonl
 ```
@@ -109,9 +126,9 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信" --
 注意：
 
 - 建议使用第 1 步的 Chrome CDP 模式；七麦依赖真实浏览器页面触发接口。
-- 当前不支持 `--type creator`、榜单、评论、历史趋势、媒体下载。
+- 当前不支持 `--type creator`、历史趋势、媒体下载。
 - 七麦账号权限决定能看到多少数据；如遇登录、滑块或频控，在 Chrome 窗口里人工处理后降低采集量重试。
-- SQLite 表名：`qimai_app`；JSONL 默认路径：`data/qimai/jsonl/search_contents_日期.jsonl`。
+- SQLite 表名：App/榜单写入 `qimai_app`，评论写入 `qimai_comment`；JSONL 默认路径：`data/qimai/jsonl/*_contents_日期.jsonl` 和 `*_comments_日期.jsonl`。
 
 ---
 
@@ -157,9 +174,16 @@ uv run main.py --platform xhs --lt qrcode --type creator --max_pages 3 --creator
 # 闲鱼：关键词搜索商品
 uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 60 --save_data_option sqlite
 
-# 七麦：关键词搜索 App 和指定 App ID 详情
+# 七麦：关键词搜索、详情/评论、榜单
 uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小红书" --crawler_max_notes_count 20 --save_data_option sqlite
-uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478124" --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type detail --specified_id "977946724" --get_comment true --max_comments_count_singlenotes 20 --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type grossing --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
 ```
 
 ## 5. 采集列表统计：
@@ -254,7 +278,9 @@ uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,�
 
 uv run main.py --platform qimai --lt qrcode --type search --keywords "微信,小红书" --crawler_max_notes_count 20 --save_data_option sqlite
 
-uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478124" --save_data_option sqlite
+uv run main.py --platform qimai --lt qrcode --type detail --specified_id "414478124" --get_comment true --max_comments_count_singlenotes 20 --save_data_option sqlite
+
+uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free --qimai_rank_date "2026-09-29" --qimai_rank_genre 6017 --qimai_rank_max_count 250 --save_data_option sqlite
 
 <!-- 启动服务 -->
 

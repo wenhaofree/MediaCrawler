@@ -74,8 +74,10 @@ class QimaiCrawler(AbstractCrawler):
                 await self.search()
             elif config.CRAWLER_TYPE == "detail":
                 await self.get_specified_apps()
+            elif config.CRAWLER_TYPE == "rank":
+                await self.rank()
             else:
-                utils.logger.info("[QimaiCrawler.start] Qimai MVP only supports search and detail")
+                utils.logger.info("[QimaiCrawler.start] Qimai supports search, detail and rank")
 
             utils.logger.info("[QimaiCrawler.start] Qimai crawler finished")
 
@@ -94,7 +96,25 @@ class QimaiCrawler(AbstractCrawler):
             source_keyword_var.set(app_id)
             apps = await self.qimai_client.get_app_detail(app_id)
             await qimai_store.batch_update_qimai_apps(apps)
+            if config.ENABLE_GET_COMMENTS:
+                comments = await self.qimai_client.get_app_comments(
+                    app_id,
+                    config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+                )
+                await qimai_store.batch_update_qimai_comments(comments)
             await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+
+    async def rank(self) -> None:
+        source_keyword_var.set(
+            f"rank:{config.QIMAI_RANK_TYPE}:{config.QIMAI_RANK_GENRE}:{config.QIMAI_RANK_DATE or 'latest'}"
+        )
+        apps = await self.qimai_client.get_rank_apps(
+            config.QIMAI_RANK_TYPE,
+            config.QIMAI_RANK_DATE,
+            config.QIMAI_RANK_GENRE,
+            config.QIMAI_RANK_MAX_COUNT,
+        )
+        await qimai_store.batch_update_qimai_apps(apps)
 
     async def launch_browser(
         self,

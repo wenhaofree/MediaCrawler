@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from base.base_crawler import AbstractStore
 from database.db_session import get_session
-from database.models import QimaiApp
+from database.models import QimaiApp, QimaiComment
 from database.mongodb_store_base import MongoDBStoreBase
 from store.excel_store_base import ExcelStoreBase
 from tools import utils
@@ -23,7 +23,7 @@ class QimaiCsvStoreImplement(AbstractStore):
         await self.writer.write_to_csv(item_type="contents", item=content_item)
 
     async def store_comment(self, comment_item: Dict):
-        pass
+        await self.writer.write_to_csv(item_type="comments", item=comment_item)
 
     async def store_creator(self, creator: Dict):
         pass
@@ -38,7 +38,7 @@ class QimaiJsonStoreImplement(AbstractStore):
         await self.writer.write_single_item_to_json(item_type="contents", item=content_item)
 
     async def store_comment(self, comment_item: Dict):
-        pass
+        await self.writer.write_single_item_to_json(item_type="comments", item=comment_item)
 
     async def store_creator(self, creator: Dict):
         pass
@@ -53,7 +53,7 @@ class QimaiJsonlStoreImplement(AbstractStore):
         await self.writer.write_to_jsonl(item_type="contents", item=content_item)
 
     async def store_comment(self, comment_item: Dict):
-        pass
+        await self.writer.write_to_jsonl(item_type="comments", item=comment_item)
 
     async def store_creator(self, creator: Dict):
         pass
@@ -77,7 +77,20 @@ class QimaiDbStoreImplement(AbstractStore):
                 session.add(QimaiApp(**content_item))
 
     async def store_comment(self, comment_item: Dict):
-        pass
+        comment_id = comment_item.get("comment_id")
+        if not comment_id:
+            return
+        async with get_session() as session:
+            stmt = select(QimaiComment).where(QimaiComment.comment_id == comment_id)
+            res = await session.execute(stmt)
+            db_item = res.scalar_one_or_none()
+            if db_item:
+                for key, value in comment_item.items():
+                    if key != "add_ts":
+                        setattr(db_item, key, value)
+            else:
+                comment_item["add_ts"] = comment_item.get("add_ts") or utils.get_current_timestamp()
+                session.add(QimaiComment(**comment_item))
 
     async def store_creator(self, creator: Dict):
         pass
@@ -103,7 +116,14 @@ class QimaiMongoStoreImplement(AbstractStore):
         )
 
     async def store_comment(self, comment_item: Dict):
-        pass
+        comment_id = comment_item.get("comment_id")
+        if not comment_id:
+            return
+        await self.mongo_store.save_or_update(
+            collection_suffix="comments",
+            query={"comment_id": comment_id},
+            data=comment_item,
+        )
 
     async def store_creator(self, creator: Dict):
         pass
