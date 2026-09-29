@@ -213,6 +213,27 @@ class GoofishItem(Base):
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
 
+class QimaiApp(Base):
+    __tablename__ = 'qimai_app'
+    id = Column(Integer, primary_key=True, comment='主键ID')
+    app_id = Column(String(128), nullable=False, index=True, unique=True, comment='应用ID')
+    app_name = Column(Text, comment='应用名称')
+    subtitle = Column(Text, comment='副标题')
+    publisher = Column(Text, comment='开发者')
+    category = Column(Text, comment='分类')
+    current_rank = Column(Text, comment='当前排名')
+    rating_value = Column(Text, comment='评分')
+    rating_count = Column(Text, comment='评分人数')
+    icon_url = Column(Text, comment='图标URL')
+    bundle_id = Column(Text, comment='包名')
+    release_date = Column(Text, comment='发布日期')
+    last_update_date = Column(Text, comment='最近更新日期')
+    version = Column(Text, comment='版本')
+    app_desc = Column(Text, comment='应用描述')
+    source_keyword = Column(Text, default='', comment='来源关键词')
+    add_ts = Column(BigInteger, comment='添加时间戳')
+    last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
+
 class WeiboNote(Base):
     __tablename__ = 'weibo_note'
     id = Column(Integer, primary_key=True, comment='主键ID')
