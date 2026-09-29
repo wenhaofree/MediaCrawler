@@ -101,8 +101,15 @@ async def update_douyin_aweme(aweme_item: Dict):
         "title": aweme_item.get("desc", ""),
         "desc": aweme_item.get("desc", ""),
         "create_time": aweme_item.get("create_time"),
-        "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
-        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "user_id": str(user_info.get("uid") or ""),
+        "sec_uid": user_info.get("sec_uid", ""),
+        "short_user_id": str(user_info.get("short_id") or ""),
+        "user_unique_id": str(user_info.get("unique_id") or ""),
+        "user_signature": user_info.get("signature", ""),
+        "nickname": user_info.get("nickname", ""),
+        "avatar": (user_info.get("avatar_thumb", {}).get("url_list", [""])[0] if user_info.get("avatar_thumb") else ""),
+        "ip_location": aweme_item.get("ip_label", ""),
+        "creator_hash": anonymize_user_id(user_info.get("uid")),
         "liked_count": str(interact_info.get("digg_count")),
         "collected_count": str(interact_info.get("collect_count")),
         "comment_count": str(interact_info.get("comment_count")),
@@ -134,13 +141,21 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
     user_info = comment_item.get("user", {})
     comment_id = comment_item.get("cid")
     parent_comment_id = comment_item.get("reply_id", "0")
+    avatar_info = (user_info.get("avatar_medium", {}) or user_info.get("avatar_300x300", {}) or user_info.get("avatar_168x168", {}) or user_info.get("avatar_thumb", {}) or {})
     save_comment_item = {
         "comment_id": comment_id,
         "create_time": comment_item.get("create_time"),
         "aweme_id": aweme_id,
         "content": comment_item.get("text"),
-        "creator_hash": anonymize_user_id(user_info.get("uid")),  # 创作者匿名哈希(不存原始 uid)
-        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "user_id": str(user_info.get("uid") or ""),
+        "sec_uid": user_info.get("sec_uid", ""),
+        "short_user_id": str(user_info.get("short_id") or ""),
+        "user_unique_id": str(user_info.get("unique_id") or ""),
+        "user_signature": user_info.get("signature", ""),
+        "nickname": user_info.get("nickname", ""),
+        "avatar": (avatar_info.get("url_list", [""])[0] if avatar_info.get("url_list") else ""),
+        "ip_location": comment_item.get("ip_label", ""),
+        "creator_hash": anonymize_user_id(user_info.get("uid")),
         "sub_comment_count": str(comment_item.get("reply_comment_total", 0)),
         "like_count": (comment_item.get("digg_count") if comment_item.get("digg_count") else 0),
         "last_modify_ts": utils.get_current_timestamp(),

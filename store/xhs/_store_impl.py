@@ -137,8 +137,11 @@ class XhsDbStoreImplement(AbstractStore):
         add_ts = int(get_current_timestamp())
         last_modify_ts = int(get_current_timestamp())
         note = XhsNote(
-            creator_hash=content_item.get("creator_hash"),
+            user_id=content_item.get("user_id"),
             nickname=content_item.get("nickname"),
+            avatar=content_item.get("avatar"),
+            ip_location=content_item.get("ip_location"),
+            creator_hash=content_item.get("creator_hash"),
             add_ts=add_ts,
             last_modify_ts=last_modify_ts,
             note_id=content_item.get("note_id"),
@@ -165,6 +168,11 @@ class XhsDbStoreImplement(AbstractStore):
         last_modify_ts = int(get_current_timestamp())
         update_data = {
             "last_modify_ts": last_modify_ts,
+            "user_id": content_item.get("user_id"),
+            "nickname": content_item.get("nickname"),
+            "avatar": content_item.get("avatar"),
+            "ip_location": content_item.get("ip_location"),
+            "creator_hash": content_item.get("creator_hash"),
             "liked_count": str(content_item.get("liked_count")),
             "collected_count": str(content_item.get("collected_count")),
             "comment_count": str(content_item.get("comment_count")),
@@ -195,8 +203,11 @@ class XhsDbStoreImplement(AbstractStore):
         add_ts = int(get_current_timestamp())
         last_modify_ts = int(get_current_timestamp())
         comment = XhsNoteComment(
-            creator_hash=comment_item.get("creator_hash"),
+            user_id=comment_item.get("user_id"),
             nickname=comment_item.get("nickname"),
+            avatar=comment_item.get("avatar"),
+            ip_location=comment_item.get("ip_location"),
+            creator_hash=comment_item.get("creator_hash"),
             add_ts=add_ts,
             last_modify_ts=last_modify_ts,
             comment_id=comment_item.get("comment_id"),
@@ -215,6 +226,11 @@ class XhsDbStoreImplement(AbstractStore):
         last_modify_ts = int(get_current_timestamp())
         update_data = {
             "last_modify_ts": last_modify_ts,
+            "user_id": comment_item.get("user_id"),
+            "nickname": comment_item.get("nickname"),
+            "avatar": comment_item.get("avatar"),
+            "ip_location": comment_item.get("ip_location"),
+            "creator_hash": comment_item.get("creator_hash"),
             "like_count": str(comment_item.get("like_count")),
             "sub_comment_count": int(comment_item.get("sub_comment_count", 0) or 0),
         }

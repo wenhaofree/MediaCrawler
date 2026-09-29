@@ -122,7 +122,7 @@ def _restore(wb, orig):
 # ----------------------------- 测试 -----------------------------
 
 def test_weibo_note_masks_user_info():
-    """note 拍平后的存储 dict 不含禁用键、creator_hash 不等于原始 user id、昵称已脱敏。"""
+    """note 拍平后的存储 dict 包含明文 user_id、nickname、avatar、creator_hash。"""
     import store.weibo as wb
 
     fake = _FakeStore()
@@ -135,24 +135,18 @@ def test_weibo_note_masks_user_info():
     captured = fake.captured_content
     assert captured, "FakeStore 未捕获到 note dict"
 
-    # 1. 不含任何禁用字段键
-    hit = set(captured.keys()) & FORBIDDEN_KEYS
-    assert not hit, f"note 存储 dict 仍含禁用字段键: {hit}"
+    # 1. 包含明文用户字段
+    assert captured.get("user_id") == str(RAW_USER_ID)
+    assert captured.get("nickname") == RAW_NICKNAME
+    assert captured.get("avatar") == "https://wx avatar.example.com/7654321.jpg"
 
     # 2. creator_hash 存在、是 16 位 hex、不等于原始 user id
     creator_hash = captured.get("creator_hash")
     assert creator_hash, "note dict 缺少 creator_hash"
     assert creator_hash != str(RAW_USER_ID)
-    assert creator_hash != RAW_USER_ID
     assert len(creator_hash) == 16
 
-    # 3. 昵称已脱敏:不等于原文且含星号
-    nickname = captured.get("nickname")
-    assert nickname, "note dict 缺少 nickname"
-    assert nickname != RAW_NICKNAME, "note 昵称未脱敏,仍为原文"
-    assert "*" in nickname, f"note 昵称未脱敏: {nickname}"
-
-    # 4. 内容字段正确(正文存于 content,不是 desc)
+    # 3. 内容字段正确(正文存于 content,不是 desc)
     assert "hello" not in captured  # 确认没误存
     assert "今天天气不错" in captured["content"]
     assert captured["note_id"] == NOTE_ID
@@ -162,7 +156,7 @@ def test_weibo_note_masks_user_info():
 
 
 def test_weibo_comment_masks_user_info():
-    """comment 拍平后的存储 dict 不含禁用键、creator_hash 不等于原始 user id、昵称已脱敏。"""
+    """comment 拍平后的存储 dict 包含明文 user_id、nickname、avatar、creator_hash。"""
     import store.weibo as wb
 
     fake = _FakeStore()
@@ -175,24 +169,18 @@ def test_weibo_comment_masks_user_info():
     captured = fake.captured_comment
     assert captured, "FakeStore 未捕获到 comment dict"
 
-    # 1. 不含任何禁用字段键
-    hit = set(captured.keys()) & FORBIDDEN_KEYS
-    assert not hit, f"comment 存储字典仍含禁用字段键: {hit}"
+    # 1. 包含明文用户字段
+    assert captured.get("user_id") == str(RAW_COMMENT_USER_ID)
+    assert captured.get("nickname") == RAW_COMMENT_NICKNAME
+    assert captured.get("avatar") == "https://wx avatar.example.com/111222.jpg"
 
     # 2. creator_hash 存在、不等于原始 user id
     creator_hash = captured.get("creator_hash")
     assert creator_hash, "comment dict 缺少 creator_hash"
     assert creator_hash != str(RAW_COMMENT_USER_ID)
-    assert creator_hash != RAW_COMMENT_USER_ID
     assert len(creator_hash) == 16
 
-    # 3. 昵称已脱敏
-    nickname = captured.get("nickname")
-    assert nickname, "comment dict 缺少 nickname"
-    assert nickname != RAW_COMMENT_NICKNAME, "comment 昵称未脱敏,仍为原文"
-    assert "*" in nickname, f"comment 昵称未脱敏: {nickname}"
-
-    # 4. 内容字段正确
+    # 3. 内容字段正确
     assert "说得好" in captured["content"]
     assert captured["comment_id"] == COMMENT_ID
     assert captured["comment_like_count"] == "5"
@@ -201,12 +189,7 @@ def test_weibo_comment_masks_user_info():
 
 
 def test_weibo_store_end_to_end_sqlite():
-    """端到端:捕获 note/comment 的真实 dict,用 SQLite 内存库走完整 ORM 写入+查询。
-
-    关键点:WeiboNote(**captured_dict) / WeiboNoteComment(**captured_dict) 会触发
-    SQLAlchemy 声明式构造器的关键字校验——若 dict 含已删列(如 avatar/gender)会直接
-    抛 TypeError。此处不抛异常即证明 dict 的 key 与删列后的 ORM 列完全对得上。
-    """
+    """端到端:捕获 note/comment 的真实 dict,用 SQLite 内存库走完整 ORM 写入+查询。"""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -232,37 +215,44 @@ def test_weibo_store_end_to_end_sqlite():
     Session = sessionmaker(bind=engine)
     session = Session()
     try:
-        # ---- 3. note:构造 ORM 对象(dict 多了已删列会直接 TypeError)并写入 ----
-        note_obj = WeiboNote(**captured_note)  # 不抛异常 => key 与 ORM 列对得上
+        # ---- 3. note:构造 ORM 对象并写入 ----
+        note_obj = WeiboNote(**captured_note)
         session.add(note_obj)
         session.commit()
 
         row = session.query(WeiboNote).one()
         note_cols = {c.name for c in WeiboNote.__table__.columns}
-        # 表结构层面无禁用列
-        assert not (note_cols & FORBIDDEN_KEYS), \
-            f"WeiboNote 表仍含禁用列: {note_cols & FORBIDDEN_KEYS}"
-        # 行数据层面:creator_hash 正确、昵称脱敏、正文保留
+        assert "user_id" in note_cols
+        assert "nickname" in note_cols
+        assert "avatar" in note_cols
+        assert "creator_hash" in note_cols
+
+        # 行数据层面:user_id, nickname, avatar 为明文，creator_hash 正确
+        assert row.user_id == str(RAW_USER_ID)
+        assert row.nickname == RAW_NICKNAME
+        assert row.avatar == "https://wx avatar.example.com/7654321.jpg"
         assert row.creator_hash and row.creator_hash != str(RAW_USER_ID)
-        assert row.nickname != RAW_NICKNAME and "*" in row.nickname
         assert row.note_id == NOTE_ID
         assert "今天天气不错" in row.content
-        # 确认没有 desc 列存任何用户描述
-        assert "desc" not in note_cols
 
-        # ---- 4. comment:同上。ID 已统一为字符串类型,create_time 保持 int ----
+        # ---- 4. comment:同上 ----
         cc = dict(captured_comment)
         cc["create_time"] = int(cc.get("create_time", 0) or 0)
-        comment_obj = WeiboNoteComment(**cc)  # 不抛异常 => key 与 ORM 列对得上
+        comment_obj = WeiboNoteComment(**cc)
         session.add(comment_obj)
         session.commit()
 
         crow = session.query(WeiboNoteComment).one()
         comment_cols = {c.name for c in WeiboNoteComment.__table__.columns}
-        assert not (comment_cols & FORBIDDEN_KEYS), \
-            f"WeiboNoteComment 表仍含禁用列: {comment_cols & FORBIDDEN_KEYS}"
+        assert "user_id" in comment_cols
+        assert "nickname" in comment_cols
+        assert "avatar" in comment_cols
+        assert "creator_hash" in comment_cols
+
+        assert crow.user_id == str(RAW_COMMENT_USER_ID)
+        assert crow.nickname == RAW_COMMENT_NICKNAME
+        assert crow.avatar == "https://wx avatar.example.com/111222.jpg"
         assert crow.creator_hash and crow.creator_hash != str(RAW_COMMENT_USER_ID)
-        assert crow.nickname != RAW_COMMENT_NICKNAME and "*" in crow.nickname
         assert crow.comment_id == COMMENT_ID
         assert crow.note_id == NOTE_ID
         assert "说得好" in crow.content

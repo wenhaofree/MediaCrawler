@@ -80,8 +80,11 @@ async def update_xhs_note(note_item: Dict):
         "video_url": video_url,  # Note video url
         "time": note_item.get("time"),  # Note publish time
         "last_update_time": note_item.get("last_update_time", 0),  # Note last update time
-        "creator_hash": anonymize_user_id(user_info.get("user_id")),  # 创作者匿名哈希(不存原始 user_id)
-        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "user_id": user_info.get("user_id", ""),
+        "nickname": user_info.get("nickname", ""),
+        "avatar": user_info.get("image", ""),
+        "ip_location": note_item.get("ip_location", ""),
+        "creator_hash": anonymize_user_id(user_info.get("user_id")),
         "liked_count": interact_info.get("liked_count"),  # Like count
         "collected_count": interact_info.get("collected_count"),  # Collection count
         "comment_count": interact_info.get("comment_count"),  # Comment count
@@ -132,8 +135,11 @@ async def update_xhs_note_comment(note_id: str, comment_item: Dict):
         "create_time": comment_item.get("create_time"),  # Comment time
         "note_id": note_id,  # Note ID
         "content": comment_item.get("content"),  # Comment content
-        "creator_hash": anonymize_user_id(user_info.get("user_id")),  # 创作者匿名哈希(不存原始 user_id)
-        "nickname": mask_nickname(user_info.get("nickname")),  # 用户昵称(已脱敏)
+        "user_id": user_info.get("user_id", ""),
+        "nickname": user_info.get("nickname", ""),
+        "avatar": user_info.get("image", ""),
+        "ip_location": comment_item.get("ip_location", ""),
+        "creator_hash": anonymize_user_id(user_info.get("user_id")),
         "sub_comment_count": comment_item.get("sub_comment_count", 0),  # Sub-comment count
         "pictures": ",".join(comment_pictures),  # Comment pictures
         "parent_comment_id": target_comment.get("id", ""),  # Parent comment ID

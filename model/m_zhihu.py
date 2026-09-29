@@ -38,8 +38,14 @@ class ZhihuContent(BaseModel):
     voteup_count: int = Field(default=0, description="Upvote count")
     comment_count: int = Field(default=0, description="Comment count")
     source_keyword: str = Field(default="", description="Source keyword")
+    user_id: str = Field(default="", description="User ID")
+    user_link: str = Field(default="", description="User homepage link")
+    user_nickname: str = Field(default="", description="User nickname")
+    nickname: str = Field(default="", description="User nickname")
+    user_avatar: str = Field(default="", description="User avatar URL")
+    avatar: str = Field(default="", description="User avatar URL")
+    user_url_token: str = Field(default="", description="User url_token")
     creator_hash: str = Field(default="", description="Creator anonymized hash")
-    user_nickname: str = Field(default="", description="User nickname (masked)")
 
 
 class ZhihuComment(BaseModel):
@@ -56,16 +62,29 @@ class ZhihuComment(BaseModel):
     dislike_count: int = Field(default=0, description="Dislike count")
     content_id: str = Field(default="", description="Content ID")
     content_type: str = Field(default="", description="Content type (article | answer | zvideo)")
+    user_id: str = Field(default="", description="User ID")
+    user_link: str = Field(default="", description="User homepage link")
+    user_nickname: str = Field(default="", description="User nickname")
+    nickname: str = Field(default="", description="User nickname")
+    user_avatar: str = Field(default="", description="User avatar URL")
+    avatar: str = Field(default="", description="User avatar URL")
+    ip_location: str = Field(default="", description="IP location")
     creator_hash: str = Field(default="", description="Creator anonymized hash")
-    user_nickname: str = Field(default="", description="User nickname (masked)")
 
 
 class ZhihuCreator(BaseModel):
     """
     Zhihu creator (in-memory only; personal profile is no longer persisted)
     """
+    user_id: str = Field(default="", description="User ID")
+    user_link: str = Field(default="", description="User homepage link")
+    user_nickname: str = Field(default="", description="User nickname")
+    nickname: str = Field(default="", description="User nickname")
+    user_avatar: str = Field(default="", description="User avatar URL")
+    avatar: str = Field(default="", description="User avatar URL")
+    url_token: str = Field(default="", description="User url_token")
+    user_url_token: str = Field(default="", description="User url_token")
     creator_hash: str = Field(default="", description="Creator anonymized hash")
-    user_nickname: str = Field(default="", description="User nickname (masked)")
     follows: int = Field(default=0, description="Follows count")
     fans: int = Field(default=0, description="Fans count")
     anwser_count: int = Field(default=0, description="Answer count")

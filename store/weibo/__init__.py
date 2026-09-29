@@ -83,8 +83,6 @@ async def update_weibo_note(note_item: Dict):
     note_id = mblog.get("id")
     content_text = mblog.get("text")
     clean_text = re.sub(r"<.*?>", "", content_text)
-    # 教学版：原始 user_id 匿名化为 creator_hash，昵称脱敏；
-    # 不采集头像/主页链接/性别/IP 归属地等可定位真人的信息。
     save_content_item = {
         # Weibo information
         "note_id": note_id,
@@ -97,9 +95,14 @@ async def update_weibo_note(note_item: Dict):
         "last_modify_ts": utils.get_current_timestamp(),
         "note_url": f"https://m.weibo.cn/detail/{note_id}",
 
-        # 创作者信息（匿名化/脱敏，不含原始 user_id/avatar/gender/profile_url/ip_location）
+        # User information
+        "user_id": str(user_info.get("id") or ""),
+        "nickname": user_info.get("screen_name", ""),
+        "gender": user_info.get("gender", ""),
+        "profile_url": user_info.get("profile_url", ""),
+        "avatar": user_info.get("avatar_hd") or user_info.get("profile_image_url", ""),
+        "ip_location": (mblog.get("region_name", "").replace("发布于 ", "") if "region_name" in mblog else ""),
         "creator_hash": anonymize_user_id(user_info.get("id")),
-        "nickname": mask_nickname(user_info.get("screen_name", "")),
         "source_keyword": source_keyword_var.get(),
     }
     utils.logger.info(f"[store.weibo.update_weibo_note] weibo note id:{note_id}, title:{save_content_item.get('content')[:24]} ...")
@@ -138,8 +141,6 @@ async def update_weibo_note_comment(note_id: str, comment_item: Dict):
     user_info: Dict = comment_item.get("user") or {}
     content_text = comment_item.get("text")
     clean_text = re.sub(r"<.*?>", "", content_text)
-    # 教学版：原始 user_id 匿名化为 creator_hash，昵称脱敏；
-    # 不采集头像/主页链接/性别/IP 归属地等可定位真人的信息。
     save_comment_item = {
         "comment_id": comment_id,
         "create_time": utils.rfc2822_to_timestamp(comment_item.get("created_at")),
@@ -151,9 +152,14 @@ async def update_weibo_note_comment(note_id: str, comment_item: Dict):
         "last_modify_ts": utils.get_current_timestamp(),
         "parent_comment_id": comment_item.get("rootid", ""),
 
-        # 创作者信息（匿名化/脱敏，不含原始 user_id/avatar/gender/profile_url/ip_location）
+        # User information
+        "user_id": str(user_info.get("id") or ""),
+        "nickname": user_info.get("screen_name", ""),
+        "gender": user_info.get("gender", ""),
+        "profile_url": user_info.get("profile_url", ""),
+        "avatar": user_info.get("avatar_hd") or user_info.get("profile_image_url", ""),
+        "ip_location": comment_item.get("source", "").replace("来自", ""),
         "creator_hash": anonymize_user_id(user_info.get("id")),
-        "nickname": mask_nickname(user_info.get("screen_name", "")),
     }
     utils.logger.info(f"[store.weibo.update_weibo_note_comment] Weibo note comment: {comment_id}, content: {save_comment_item.get('content', '')[:24]} ...")
     await WeibostoreFactory.create_store().store_comment(comment_item=save_comment_item)

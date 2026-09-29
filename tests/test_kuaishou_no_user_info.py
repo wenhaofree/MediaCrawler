@@ -129,93 +129,76 @@ def _assert_no_forbidden_keys(d: dict, label: str):
 
 
 def test_kuaishou_video_masks_user_info():
-    """video 链路：原始 user_id 转 creator_hash、昵称脱敏、headerUrl/禁用键不落库。"""
+    """video 链路：包含明文 user_id、nickname、avatar 与 creator_hash。"""
     with _patch_create_store() as holder:
         asyncio.run(update_kuaishou_video(make_mock_video()))
     captured = holder.content
 
     assert captured, "FakeStore 未捕获到 content_item"
-    _assert_no_forbidden_keys(captured, "kuaishou_video")
-    # 头像字段不应进入存储 dict(author.headerUrl 已被丢弃)
-    assert "headerUrl" not in captured and "avatar" not in captured
+    assert captured.get("user_id") == MOCK_AUTHOR_ID
+    assert captured.get("nickname") == MOCK_AUTHOR_NAME
+    assert captured.get("avatar") == "https://p.kuaishou.com/header/u001.jpg"
 
     # creator_hash 存在且不等于原始 user_id
     assert captured.get("creator_hash") == anonymize_user_id(MOCK_AUTHOR_ID)
     assert captured["creator_hash"] != MOCK_AUTHOR_ID
-    assert captured["creator_hash"]  # 非空
-
-    # 昵称已脱敏：等于 mask_nickname(原文) 且不等于原文
-    assert captured.get("nickname") == mask_nickname(MOCK_AUTHOR_NAME)
-    assert captured["nickname"] != MOCK_AUTHOR_NAME
-    assert "*" in captured["nickname"]
 
     # 内容字段保留(video_id / desc / title)
     assert captured["video_id"] == MOCK_VIDEO_ID
     assert captured["desc"] == MOCK_CAPTION
     assert captured["title"] == MOCK_CAPTION
-    # video_type 来自 video_item.type，被 str() 化
     assert captured["video_type"] == "1"
-    # 计数字段被 str() 化
     assert captured["liked_count"] == "12345"
     assert captured["viewd_count"] == "67890"
 
 
 def test_kuaishou_comment_v2_masks_user_info():
-    """评论 V2(snake_case)格式：author_id/author_name 经匿名+脱敏，headurl 不落库。"""
+    """评论 V2(snake_case)格式：包含明文 user_id、nickname、avatar 与 creator_hash。"""
     with _patch_create_store() as holder:
         asyncio.run(update_ks_video_comment(MOCK_VIDEO_ID, make_mock_comment_v2()))
     captured = holder.comment
 
     assert captured, "FakeStore 未捕获到 comment_item"
-    _assert_no_forbidden_keys(captured, "kuaishou_comment_v2")
-    assert "headurl" not in captured and "avatar" not in captured
+    assert captured.get("user_id") == MOCK_COMMENT_V2_AUTHOR_ID
+    assert captured.get("nickname") == MOCK_COMMENT_V2_AUTHOR_NAME
+    assert captured.get("avatar") == "https://p.kuaishou.com/header/u888.jpg"
 
     # comment_id 由 int 转为 str
     assert captured["comment_id"] == "9001"
     assert captured["video_id"] == MOCK_VIDEO_ID
     assert captured["content"] == "太搞笑了哈哈哈"
-    # V2 用 commentCount
     assert captured["sub_comment_count"] == "7"
 
-    # creator_hash / 昵称
+    # creator_hash
     assert captured["creator_hash"] == anonymize_user_id(MOCK_COMMENT_V2_AUTHOR_ID)
     assert captured["creator_hash"] != MOCK_COMMENT_V2_AUTHOR_ID
-    assert captured["nickname"] == mask_nickname(MOCK_COMMENT_V2_AUTHOR_NAME)
-    assert captured["nickname"] != MOCK_COMMENT_V2_AUTHOR_NAME
-    assert "*" in captured["nickname"]
 
 
 def test_kuaishou_comment_legacy_masks_user_info():
-    """评论旧 GraphQL(camelCase)格式：authorId/authorName 经匿名+脱敏，headurl 不落库。"""
+    """评论旧 GraphQL(camelCase)格式：包含明文 user_id、nickname、avatar 与 creator_hash。"""
     with _patch_create_store() as holder:
         asyncio.run(update_ks_video_comment(MOCK_VIDEO_ID, make_mock_comment_legacy()))
     captured = holder.comment
 
     assert captured, "FakeStore 未捕获到 comment_item"
-    _assert_no_forbidden_keys(captured, "kuaishou_comment_legacy")
-    assert "headurl" not in captured and "avatar" not in captured
+    assert captured.get("user_id") == MOCK_COMMENT_LEGACY_AUTHOR_ID
+    assert captured.get("nickname") == MOCK_COMMENT_LEGACY_AUTHOR_NAME
+    assert captured.get("avatar") == "https://p.kuaishou.com/header/u777.jpg"
 
     # commentId 由 int 转为 str
     assert captured["comment_id"] == "8001"
     assert captured["video_id"] == MOCK_VIDEO_ID
     assert captured["content"] == "这条评论来自旧 GraphQL 接口"
-    # 旧格式用 subCommentCount
     assert captured["sub_comment_count"] == "3"
 
-    # creator_hash / 昵称
+    # creator_hash
     assert captured["creator_hash"] == anonymize_user_id(MOCK_COMMENT_LEGACY_AUTHOR_ID)
     assert captured["creator_hash"] != MOCK_COMMENT_LEGACY_AUTHOR_ID
-    assert captured["nickname"] == mask_nickname(MOCK_COMMENT_LEGACY_AUTHOR_NAME)
-    assert captured["nickname"] != MOCK_COMMENT_LEGACY_AUTHOR_NAME
-    assert "*" in captured["nickname"]
 
 
 def test_kuaishou_store_end_to_end_sqlite():
     """端到端：FakeStore 捕获真实 dict -> KuaishouVideo(**captured) ORM 列校验
-    -> 写入内存 SQLite -> 查询回读，验证属性正确且无禁用列。
-
-    全程在同一个事件循环内完成(aiosqlite 连接绑定事件循环，跨 loop 会报错)，
-    不 patch db_session.get_session，而是直接用自建内存 engine 走 ORM 写入/查询。"""
+    -> 写入内存 SQLite -> 查询回读，验证属性正确。"""
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
@@ -224,7 +207,6 @@ def test_kuaishou_store_end_to_end_sqlite():
     from database.models import Base, KuaishouVideo, KuaishouVideoComment
 
     async def run():
-        # 内存 SQLite + StaticPool：单连接共享，保证 create_all 与后续读写同一库
         engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
         SessionFactory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         async with engine.begin() as conn:
@@ -239,19 +221,19 @@ def test_kuaishou_store_end_to_end_sqlite():
         captured = holder.content
         assert captured, "FakeStore 未捕获到 content_item"
 
-        # 2) ORM 列校验：captured 的所有 key 必须是 KuaishouVideo 的合法列，
-        #    否则 KuaishouVideo(**captured) 抛 TypeError(若有禁用/多余键即暴露源码 bug)
+        # 2) ORM 列校验
         valid_cols = {c.name for c in KuaishouVideo.__table__.columns}
         assert set(captured.keys()) <= valid_cols, (
             f"captured 含非合法列: {set(captured.keys()) - valid_cols}"
         )
-        obj = KuaishouVideo(**captured)  # 不抛异常即通过列校验
+        obj = KuaishouVideo(**captured)
         assert obj.video_id == MOCK_VIDEO_ID
+        assert obj.user_id == MOCK_AUTHOR_ID
+        assert obj.nickname == MOCK_AUTHOR_NAME
+        assert obj.avatar == "https://p.kuaishou.com/header/u001.jpg"
         assert obj.creator_hash == anonymize_user_id(MOCK_AUTHOR_ID)
         assert obj.creator_hash != MOCK_AUTHOR_ID
-        assert obj.nickname == mask_nickname(MOCK_AUTHOR_NAME)
-        assert obj.nickname != MOCK_AUTHOR_NAME
-        assert obj.desc == MOCK_CAPTION  # 内容保留
+        assert obj.desc == MOCK_CAPTION
 
         # 3) 真实写库 + 查询回读
         async with SessionFactory() as session:
@@ -264,16 +246,13 @@ def test_kuaishou_store_end_to_end_sqlite():
             row = res.scalar_one()
             assert row is not None
             assert row.video_id == MOCK_VIDEO_ID
+            assert row.user_id == MOCK_AUTHOR_ID
+            assert row.nickname == MOCK_AUTHOR_NAME
+            assert row.avatar == "https://p.kuaishou.com/header/u001.jpg"
             assert row.creator_hash == anonymize_user_id(MOCK_AUTHOR_ID)
             assert row.creator_hash != MOCK_AUTHOR_ID
-            assert row.nickname == mask_nickname(MOCK_AUTHOR_NAME)
-            assert row.nickname != MOCK_AUTHOR_NAME
-            # 内容字段保留
             assert row.desc == MOCK_CAPTION
             assert row.title == MOCK_CAPTION
-            # ORM 行对象上不应存在任何禁用列属性
-            for bad in FORBIDDEN_KEYS:
-                assert not hasattr(row, bad), f"KuaishouVideo 行对象仍含禁用属性: {bad}"
 
         await engine.dispose()
 

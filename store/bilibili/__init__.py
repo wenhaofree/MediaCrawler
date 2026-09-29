@@ -62,8 +62,10 @@ async def update_bilibili_video(video_item: Dict):
         "title": video_item_view.get("title", "")[:500],
         "desc": video_item_view.get("desc", "")[:500],
         "create_time": video_item_view.get("pubdate"),
-        "creator_hash": anonymize_user_id(video_user_info.get("mid")),  # 创作者匿名哈希(不存原始 mid)
-        "nickname": mask_nickname(video_user_info.get("name")),  # 用户昵称(已脱敏)
+        "user_id": str(video_user_info.get("mid") or ""),
+        "nickname": video_user_info.get("name", ""),
+        "avatar": video_user_info.get("face", ""),
+        "creator_hash": anonymize_user_id(video_user_info.get("mid")),
         "liked_count": str(video_item_stat.get("like", "")),
         "disliked_count": str(video_item_stat.get("dislike", "")),
         "video_play_count": str(video_item_stat.get("view", "")),
@@ -105,8 +107,12 @@ async def update_bilibili_video_comment(video_id: str, comment_item: Dict):
         "create_time": comment_item.get("ctime"),
         "video_id": str(video_id),
         "content": content.get("message"),
-        "creator_hash": anonymize_user_id(user_info.get("mid")),  # 创作者匿名哈希(不存原始 mid)
-        "nickname": mask_nickname(user_info.get("uname")),  # 用户昵称(已脱敏)
+        "user_id": str(user_info.get("mid") or ""),
+        "nickname": user_info.get("uname", ""),
+        "avatar": user_info.get("avatar", ""),
+        "sex": user_info.get("sex", ""),
+        "sign": user_info.get("sign", ""),
+        "creator_hash": anonymize_user_id(user_info.get("mid")),
         "sub_comment_count": str(comment_item.get("rcount", 0)),
         "like_count": like_count,
         "last_modify_ts": utils.get_current_timestamp(),
@@ -159,8 +165,11 @@ async def update_bilibili_creator_contact(creator_info: Dict, fan_info: Dict):
 async def update_bilibili_creator_dynamic(creator_info: Dict, dynamic_info: Dict):
     save_dynamic_item = {
         "dynamic_id": dynamic_info["dynamic_id"],
-        "creator_hash": anonymize_user_id(creator_info.get("id")),  # 创作者匿名哈希(不存原始 ID)
-        "user_name": mask_nickname(creator_info.get("name")),  # 用户名称(已脱敏)
+        "user_id": str(creator_info.get("id") or ""),
+        "user_name": creator_info.get("name", ""),
+        "nickname": creator_info.get("name", ""),
+        "avatar": creator_info.get("avatar", ""),
+        "creator_hash": anonymize_user_id(creator_info.get("id")),
         "text": dynamic_info["text"],
         "type": dynamic_info["type"],
         "pub_ts": dynamic_info["pub_ts"],

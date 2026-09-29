@@ -64,8 +64,10 @@ async def update_kuaishou_video(video_item: Dict):
         "title": photo_info.get("caption", "")[:500],
         "desc": photo_info.get("caption", "")[:500],
         "create_time": photo_info.get("timestamp"),
-        "creator_hash": anonymize_user_id(user_info.get("id")),  # 创作者匿名哈希(不存原始 user_id)
-        "nickname": mask_nickname(user_info.get("name")),  # 用户昵称(已脱敏)
+        "user_id": str(user_info.get("id") or ""),
+        "nickname": user_info.get("name", ""),
+        "avatar": user_info.get("headerUrl", ""),
+        "creator_hash": anonymize_user_id(user_info.get("id")),
         "liked_count": str(photo_info.get("realLikeCount")),
         "viewd_count": str(photo_info.get("viewCount")),
         "last_modify_ts": utils.get_current_timestamp(),
@@ -97,10 +99,10 @@ async def update_ks_video_comment(video_id: str, comment_item: Dict):
         "create_time": comment_item.get("timestamp"),
         "video_id": video_id,
         "content": comment_item.get("content"),
-        # 创作者匿名哈希(不存原始 user_id)：V2: author_id, Old: authorId
+        "user_id": str(comment_item.get("author_id") or comment_item.get("authorId") or ""),
+        "nickname": (comment_item.get("author_name") or comment_item.get("authorName") or ""),
+        "avatar": comment_item.get("headurl", ""),
         "creator_hash": anonymize_user_id(comment_item.get("author_id") or comment_item.get("authorId")),
-        # 用户昵称(已脱敏)：V2: author_name, Old: authorName
-        "nickname": mask_nickname(comment_item.get("author_name") or comment_item.get("authorName")),
         # V2: commentCount, Old: subCommentCount
         "sub_comment_count": str(comment_item.get("commentCount") or comment_item.get("subCommentCount", 0)),
         "last_modify_ts": utils.get_current_timestamp(),

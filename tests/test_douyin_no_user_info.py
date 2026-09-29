@@ -170,15 +170,6 @@ def test_douyin_aweme_masks_user_info():
     aweme = _build_aweme_item()
     raw_uid = aweme["author"]["uid"]
     raw_nick = aweme["author"]["nickname"]
-    raw_sensitive = [
-        raw_uid,
-        aweme["author"]["sec_uid"],
-        aweme["author"]["short_id"],
-        aweme["author"]["unique_id"],
-        aweme["author"]["avatar_thumb"]["url_list"][0],
-        aweme["author"]["signature"],
-        aweme["ip_label"],
-    ]
 
     fake = _FakeStore()
     orig = _patch_factory(fake)
@@ -190,27 +181,25 @@ def test_douyin_aweme_masks_user_info():
     assert len(fake.contents) == 1
     captured = fake.contents[0]
 
-    # 1. 禁用键不出现
-    _assert_no_forbidden(captured, "douyin_aweme")
-    # 2. 原始敏感值不泄漏到任何存储值
-    _assert_raw_values_absent(captured, raw_sensitive, "douyin_aweme")
-    # 3. creator_hash 存在、≠原 uid、与 anonymize_user_id 一致
+    # 1. 包含明文用户字段
+    assert captured.get("user_id") == raw_uid
+    assert captured.get("nickname") == raw_nick
+    assert captured.get("avatar") == "http://x/avatar_thumb.jpg"
+
+    # 2. creator_hash 存在、≠原 uid、与 anonymize_user_id 一致
     assert captured.get("creator_hash")
     assert captured["creator_hash"] != raw_uid
     assert captured["creator_hash"] == anonymize_user_id(raw_uid)
-    # 4. nickname 保留但脱敏,≠原文,与 mask_nickname 一致
-    assert captured.get("nickname")
-    assert captured["nickname"] != raw_nick
-    assert captured["nickname"] == mask_nickname(raw_nick)
-    # 5. 内容字段保留(desc/title 是作品描述,不禁用)
+
+    # 3. 内容字段保留(desc/title 是作品描述,不禁用)
     assert captured.get("desc") == aweme["desc"]
     assert captured.get("title") == aweme["desc"]
-    # 6. _extract_* 内容字段正常提取(非空)
+    # 4. _extract_* 内容字段正常提取(非空)
     assert captured.get("cover_url") == "http://x/cover.jpg"
     assert captured.get("video_download_url") == "http://x/video_h264.mp4"
     assert captured.get("music_download_url") == "http://x/music.mp3"
     assert "http://x/note_img1.jpg" in captured.get("note_download_url", "")
-    # 7. 互动数据拍平
+    # 5. 互动数据拍平
     assert captured.get("liked_count") == "100"
     assert captured.get("collected_count") == "5"
     assert captured.get("comment_count") == "20"
@@ -223,15 +212,6 @@ def test_douyin_comment_masks_user_info():
     comment = _build_comment_item()
     raw_uid = comment["user"]["uid"]
     raw_nick = comment["user"]["nickname"]
-    raw_sensitive = [
-        raw_uid,
-        comment["user"]["sec_uid"],
-        comment["user"]["short_id"],
-        comment["user"]["unique_id"],
-        comment["user"]["avatar_medium"]["url_list"][0],
-        comment["user"]["signature"],
-        comment["ip_label"],
-    ]
 
     fake = _FakeStore()
     orig = _patch_factory(fake)
@@ -243,15 +223,13 @@ def test_douyin_comment_masks_user_info():
     assert len(fake.comments) == 1
     captured = fake.comments[0]
 
-    _assert_no_forbidden(captured, "douyin_comment")
-    _assert_raw_values_absent(captured, raw_sensitive, "douyin_comment")
-
+    # 包含明文用户字段
+    assert captured.get("user_id") == raw_uid
+    assert captured.get("nickname") == raw_nick
+    assert captured.get("avatar") == "http://x/cavatar.jpg"
     assert captured.get("creator_hash")
     assert captured["creator_hash"] != raw_uid
     assert captured["creator_hash"] == anonymize_user_id(raw_uid)
-    assert captured.get("nickname")
-    assert captured["nickname"] != raw_nick
-    assert captured["nickname"] == mask_nickname(raw_nick)
 
     # 评论内容/ID 保留
     assert captured.get("content") == comment["text"]
@@ -279,25 +257,21 @@ def test_douyin_store_end_to_end_sqlite(monkeypatch):
     captured = fake.contents[0]
 
     # ---- 2. DouyinAweme(**captured) 构造校验 ----
-    # dict 多了已删列会 TypeError,少了非空必填列 SQLAlchemy 也会报错;
-    # 此处证明 captured 的 key 与删列后 ORM 列完全对得上,不抛异常。
     obj = DouyinAweme(**captured)
     assert obj.aweme_id == aweme["aweme_id"]
+    assert obj.user_id == raw_uid
+    assert obj.nickname == raw_nick
+    assert obj.avatar == "http://x/avatar_thumb.jpg"
     assert obj.creator_hash == anonymize_user_id(raw_uid)
     assert obj.creator_hash != raw_uid
-    assert obj.nickname == mask_nickname(raw_nick)
-    assert obj.nickname != raw_nick
     assert obj.title == aweme["desc"]
     assert obj.desc == aweme["desc"]
-    _assert_no_forbidden(captured, "douyin_aweme_orm_construct")
 
     # ---- 3. 端到端:内存 SQLite + 真实 store_content ----
-    # 用 StaticPool 保证 :memory: 库在同一个连接上持久(跨 session 可见)。
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         poolclass=StaticPool,
     )
-    # 让 db_session 用内存 engine;SAVE_DATA_OPTION=db 让工厂走 DouyinDbStoreImplement
     monkeypatch.setattr(db_session, "get_async_engine", lambda *a, **kw: engine)
     monkeypatch.setattr(config, "SAVE_DATA_OPTION", "db")
 
@@ -305,7 +279,7 @@ def test_douyin_store_end_to_end_sqlite(monkeypatch):
         # 建表
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        # 真实 store_content 路径(含 int(aweme_id) 与 if content_item.get("title") 判断)
+        # 真实 store_content 路径
         await ds.update_douyin_aweme(aweme)
         # 查询回读
         async with db_session.get_session() as session:
@@ -321,24 +295,24 @@ def test_douyin_store_end_to_end_sqlite(monkeypatch):
     # ---- 4. 回读断言 ----
     assert row is not None, "作品未写入 SQLite"
     assert row.aweme_id == aweme["aweme_id"]
+    assert row.user_id == raw_uid
+    assert row.nickname == raw_nick
+    assert row.avatar == "http://x/avatar_thumb.jpg"
     assert row.creator_hash == anonymize_user_id(raw_uid)
     assert row.creator_hash != raw_uid
-    assert row.nickname == mask_nickname(raw_nick)
-    assert row.nickname != raw_nick
     assert row.desc == aweme["desc"]
     assert row.title == aweme["desc"]
     assert row.cover_url == "http://x/cover.jpg"
     assert row.video_download_url == "http://x/video_h264.mp4"
     assert row.music_download_url == "http://x/music.mp3"
-    # 禁用列在 ORM 上不存在(自省)
+
+    # captured 的所有 key 都是合法 ORM 列
     orm_cols = {c.name for c in DouyinAweme.__table__.columns}
-    assert not (orm_cols & FORBIDDEN_KEYS), f"ORM 仍含禁用列: {orm_cols & FORBIDDEN_KEYS}"
-    # captured 的所有 key 都是合法 ORM 列(无悬空 key)
     assert set(captured.keys()).issubset(orm_cols), (
         f"captured 含非 ORM 列: {set(captured.keys()) - orm_cols}"
     )
 
-    # 评论同样做一次 ORM 构造校验(证明 comment dict key 对得上)
+    # 评论同样做一次 ORM 构造校验
     comment = _build_comment_item()
     fake_c = _FakeStore()
     orig_c = _patch_factory(fake_c)
@@ -347,11 +321,12 @@ def test_douyin_store_end_to_end_sqlite(monkeypatch):
     finally:
         ds.DouyinStoreFactory.create_store = orig_c
     captured_comment = fake_c.comments[0]
-    comment_obj = DouyinAwemeComment(**captured_comment)  # 不抛异常即对得上
+    comment_obj = DouyinAwemeComment(**captured_comment)
     assert comment_obj.comment_id == comment["cid"]
+    assert comment_obj.user_id == comment["user"]["uid"]
+    assert comment_obj.nickname == comment["user"]["nickname"]
+    assert comment_obj.avatar == "http://x/cavatar.jpg"
     assert comment_obj.creator_hash == anonymize_user_id(comment["user"]["uid"])
-    assert comment_obj.nickname == mask_nickname(comment["user"]["nickname"])
-    _assert_no_forbidden(captured_comment, "douyin_comment_orm_construct")
     comment_orm_cols = {c.name for c in DouyinAwemeComment.__table__.columns}
     assert set(captured_comment.keys()).issubset(comment_orm_cols), (
         f"captured_comment 含非 ORM 列: {set(captured_comment.keys()) - comment_orm_cols}"
