@@ -227,6 +227,7 @@ def test_sqlite_viewer_page_available(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert "SQLite 数据浏览器" in response.text
+    assert "sort-order-select" in response.text
 
 
 def _set_fixed_now(monkeypatch):
@@ -267,8 +268,29 @@ def test_sqlite_viewer_list_orders_douyin_content_by_create_time_desc(tmp_path, 
     payload = response.json()
 
     assert payload["total"] == 3
+    assert payload["sort_order"] == "desc"
     assert [item["source_id"] for item in payload["items"]] == ["10003", "10002", "10001"]
     assert payload["items"][0]["title"] == "今日的视频"
+
+
+def test_sqlite_viewer_list_orders_douyin_content_by_create_time_asc(tmp_path, monkeypatch):
+    db_path = tmp_path / "viewer.db"
+    _prepare_sqlite_db(db_path)
+    monkeypatch.setattr(db_config, "SQLITE_DB_PATH", str(db_path))
+
+    client = TestClient(app)
+    response = client.get(
+        "/api/sqlite-viewer/list",
+        params={"platform": "dy", "entity_type": "content", "sort_order": "asc"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["total"] == 3
+    assert payload["sort_order"] == "asc"
+    assert [item["source_id"] for item in payload["items"]] == ["10001", "10002", "10003"]
+    assert payload["items"][0]["title"] == "较早的视频"
 
 
 def test_sqlite_viewer_list_orders_all_creators_by_last_modify_ts_desc(tmp_path, monkeypatch):

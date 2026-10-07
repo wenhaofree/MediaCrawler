@@ -273,11 +273,13 @@ async def list_records(
     author_query: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    sort_order: str = "desc",
     page: int = DEFAULT_PAGE,
     page_size: int = DEFAULT_PAGE_SIZE,
 ) -> Dict[str, Any]:
     validate_platform(platform)
     validate_entity_type(entity_type)
+    normalized_sort_order = "asc" if (sort_order or "").strip().lower() == "asc" else "desc"
     time_filter_payload = _build_time_filter(time_filter, start_date, end_date)
     author_filter_payload = _build_author_filter(author_query)
 
@@ -299,6 +301,7 @@ async def list_records(
                 "author_query": author_filter_payload["author_query"],
                 "start_date": time_filter_payload["start_date"],
                 "end_date": time_filter_payload["end_date"],
+                "sort_order": normalized_sort_order,
                 "page": page,
                 "page_size": page_size,
                 "total": 0,
@@ -314,9 +317,10 @@ async def list_records(
         )
         total = int((await count_cursor.fetchone())["total"])
 
+        order_dir = "ASC" if normalized_sort_order == "asc" else "DESC"
         list_sql = (
             f"SELECT * {filtered_union_sql} "
-            "ORDER BY sort_ts DESC, record_pk DESC "
+            f"ORDER BY sort_ts {order_dir}, record_pk {order_dir} "
             "LIMIT ? OFFSET ?"
         )
         list_cursor = await db.execute(
@@ -333,6 +337,7 @@ async def list_records(
             "author_query": author_filter_payload["author_query"],
             "start_date": time_filter_payload["start_date"],
             "end_date": time_filter_payload["end_date"],
+            "sort_order": normalized_sort_order,
             "page": page,
             "page_size": page_size,
             "total": total,

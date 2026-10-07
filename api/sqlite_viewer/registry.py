@@ -27,6 +27,15 @@ ENTITY_TYPE_LABELS: Dict[str, str] = {
 }
 
 
+def normalize_ts_sql(field_name: str) -> str:
+    """Normalize timestamp field to seconds (10-digit integer) for unified cross-platform sorting."""
+    return (
+        f"CASE WHEN CAST(COALESCE({field_name}, 0) AS INTEGER) > 10000000000 "
+        f"THEN CAST(COALESCE({field_name}, 0) AS INTEGER) / 1000 "
+        f"ELSE CAST(COALESCE({field_name}, 0) AS INTEGER) END"
+    )
+
+
 @dataclass(frozen=True)
 class ViewerTableConfig:
     platform: str
@@ -58,7 +67,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="time",
-            sort_ts_expr="COALESCE(CAST(time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("time"),
             external_url_expr="COALESCE(note_url, '')",
             stats_json_expr=(
                 "json_object("
@@ -80,7 +89,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="CASE WHEN note_id IS NOT NULL AND note_id != '' THEN printf('https://www.xiaohongshu.com/explore/%s', note_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -101,7 +110,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="last_modify_ts",
-            sort_ts_expr="COALESCE(CAST(last_modify_ts AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("last_modify_ts"),
             external_url_expr="CASE WHEN user_id IS NOT NULL AND user_id != '' THEN printf('https://www.xiaohongshu.com/user/profile/%s', user_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -124,7 +133,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="COALESCE(aweme_url, '')",
             stats_json_expr=(
                 "json_object("
@@ -146,7 +155,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="CASE WHEN aweme_id IS NOT NULL THEN printf('https://www.douyin.com/video/%s', aweme_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -167,7 +176,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="last_modify_ts",
-            sort_ts_expr="COALESCE(CAST(last_modify_ts AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("last_modify_ts"),
             external_url_expr="CASE WHEN user_id IS NOT NULL AND user_id != '' THEN printf('https://www.douyin.com/user/%s', user_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -191,7 +200,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="COALESCE(video_url, '')",
             stats_json_expr=(
                 "json_object("
@@ -213,7 +222,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="CASE WHEN video_id IS NOT NULL THEN printf('https://www.bilibili.com/video/av%s', video_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -234,7 +243,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="last_modify_ts",
-            sort_ts_expr="COALESCE(CAST(last_modify_ts AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("last_modify_ts"),
             external_url_expr="CASE WHEN user_id IS NOT NULL THEN printf('https://space.bilibili.com/%s', user_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -258,7 +267,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="COALESCE(note_url, '')",
             stats_json_expr=(
                 "json_object("
@@ -279,7 +288,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="create_time",
-            sort_ts_expr="COALESCE(CAST(create_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("create_time"),
             external_url_expr="''",
             stats_json_expr=(
                 "json_object("
@@ -300,7 +309,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(avatar, '')",
             publish_raw_expr="last_modify_ts",
-            sort_ts_expr="COALESCE(CAST(last_modify_ts AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("last_modify_ts"),
             external_url_expr="CASE WHEN user_id IS NOT NULL AND user_id != '' THEN printf('https://weibo.com/u/%s', user_id) ELSE '' END",
             stats_json_expr=(
                 "json_object("
@@ -322,7 +331,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(user_nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(user_avatar, '')",
             publish_raw_expr="created_time",
-            sort_ts_expr="COALESCE(CAST(created_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("created_time"),
             external_url_expr="COALESCE(content_url, '')",
             stats_json_expr=(
                 "json_object("
@@ -343,7 +352,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(user_nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(user_avatar, '')",
             publish_raw_expr="publish_time",
-            sort_ts_expr="COALESCE(CAST(publish_time AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("publish_time"),
             external_url_expr="''",
             stats_json_expr=(
                 "json_object("
@@ -365,7 +374,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             author_expr="COALESCE(NULLIF(user_nickname, ''), CAST(user_id AS TEXT))",
             avatar_expr="COALESCE(user_avatar, '')",
             publish_raw_expr="last_modify_ts",
-            sort_ts_expr="COALESCE(CAST(last_modify_ts AS INTEGER), 0)",
+            sort_ts_expr=normalize_ts_sql("last_modify_ts"),
             external_url_expr="COALESCE(user_link, '')",
             stats_json_expr=(
                 "json_object("

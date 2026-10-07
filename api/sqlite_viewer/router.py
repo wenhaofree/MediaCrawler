@@ -45,6 +45,7 @@ async def sqlite_viewer_list(
     author_query: str | None = Query(default=None),
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
+    sort_order: str = Query(default="desc"),
     page: int = Query(default=DEFAULT_PAGE, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ):
@@ -56,6 +57,7 @@ async def sqlite_viewer_list(
             author_query=author_query,
             start_date=start_date,
             end_date=end_date,
+            sort_order=sort_order,
             page=page,
             page_size=page_size,
         )

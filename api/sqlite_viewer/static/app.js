@@ -5,6 +5,7 @@ const state = {
   timeFilter: "all",
   startDate: "",
   endDate: "",
+  sortOrder: "desc",
   page: 1,
   pageSize: 20,
   total: 0,
@@ -16,6 +17,7 @@ const platformSelect = document.getElementById("platform-select");
 const entityTypeSelect = document.getElementById("entity-type-select");
 const authorQueryInput = document.getElementById("author-query-input");
 const timeFilterSelect = document.getElementById("time-filter-select");
+const sortOrderSelect = document.getElementById("sort-order-select");
 const timeFilterHint = document.getElementById("time-filter-hint");
 const customDateRange = document.getElementById("custom-date-range");
 const startDateInput = document.getElementById("start-date-input");
@@ -50,6 +52,15 @@ const timeFilterLabel = {
   week: "一周内",
   custom: "自定义时间段",
 };
+
+const sortOrderLabel = {
+  desc: "创建时间倒序",
+  asc: "创建时间正序",
+};
+
+function getSortOrderDisplay() {
+  return sortOrderLabel[state.sortOrder] || "创建时间倒序";
+}
 
 function setLoading(visible) {
   loadingState.classList.toggle("hidden", !visible);
@@ -131,12 +142,15 @@ function getAuthorFilterDisplay() {
 function syncTimeFilterControls() {
   authorQueryInput.value = state.authorQuery;
   timeFilterSelect.value = state.timeFilter;
+  if (sortOrderSelect) {
+    sortOrderSelect.value = state.sortOrder;
+  }
   startDateInput.value = state.startDate;
   endDateInput.value = state.endDate;
   customDateRange.classList.toggle("hidden", state.timeFilter !== "custom");
   timeFilterHint.textContent = state.entityType === "creator"
     ? "创作者列表按最近更新时间筛选，其余类型按发布时间筛选。"
-    : "按发布时间筛选当前列表。";
+    : "按发布时间筛选当前列表，默认按创建时间倒序排列。";
 }
 
 function renderSummaryBar() {
@@ -155,6 +169,7 @@ function renderSummaryBar() {
       "当前平台总记录",
       formatNumber(state.options.platforms.find((item) => item.value === state.platform)?.count || 0),
     ),
+    createSummaryCard("排序方式", getSortOrderDisplay()),
     createSummaryCard("作者筛选", getAuthorFilterDisplay()),
     createSummaryCard("时间筛选", getTimeFilterDisplay()),
   );
@@ -341,7 +356,7 @@ function renderList(payload) {
   recordList.innerHTML = "";
 
   const authorMeta = payload.author_query ? ` / 作者: ${payload.author_query}` : "";
-  resultMeta.textContent = `当前筛选：${payload.platform} / ${payload.entity_type}${authorMeta} / ${getTimeFilterDisplay()}，共 ${formatNumber(payload.total)} 条`;
+  resultMeta.textContent = `当前筛选：${payload.platform} / ${payload.entity_type}${authorMeta} / ${getTimeFilterDisplay()} / ${getSortOrderDisplay()}，共 ${formatNumber(payload.total)} 条`;
   paginationMeta.textContent = payload.total
     ? `第 ${payload.page} / ${payload.total_pages} 页`
     : "暂无分页";
@@ -387,6 +402,7 @@ async function loadList() {
     platform: state.platform,
     entity_type: state.entityType,
     time_filter: state.timeFilter,
+    sort_order: state.sortOrder,
     page: String(state.page),
     page_size: String(state.pageSize),
   });
@@ -465,6 +481,15 @@ timeFilterSelect.addEventListener("change", () => {
   }
   loadList();
 });
+
+if (sortOrderSelect) {
+  sortOrderSelect.addEventListener("change", () => {
+    state.sortOrder = sortOrderSelect.value;
+    state.page = 1;
+    renderSummaryBar();
+    loadList();
+  });
+}
 
 startDateInput.addEventListener("change", () => {
   state.startDate = startDateInput.value;
