@@ -76,6 +76,22 @@ def _prepare_sqlite_db(db_path):
             fans TEXT,
             tag_list TEXT
         );
+
+        CREATE TABLE bilibili_video (
+            id INTEGER PRIMARY KEY,
+            user_id TEXT,
+            nickname TEXT,
+            avatar TEXT,
+            video_id TEXT,
+            title TEXT,
+            "desc" TEXT,
+            create_time INTEGER,
+            liked_count TEXT,
+            video_play_count TEXT,
+            video_comment TEXT,
+            video_share_count TEXT,
+            video_url TEXT
+        );
         """
     )
 
@@ -213,6 +229,19 @@ def _prepare_sqlite_db(db_path):
         ),
     )
 
+    conn.executemany(
+        """
+        INSERT INTO bilibili_video (
+            id, user_id, nickname, avatar, video_id, title, "desc", create_time,
+            liked_count, video_play_count, video_comment, video_share_count, video_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (1, "bili-a", "B站作者 A", "", "bv-a", "低播放视频", "低播放视频", 1771000000, "1", "120", "2", "0", "https://example.com/bv-a"),
+            (2, "bili-b", "B站作者 B", "", "bv-b", "高播放视频", "高播放视频", 1772000000, "3", "9800", "4", "1", "https://example.com/bv-b"),
+        ],
+    )
+
     conn.commit()
     conn.close()
 
@@ -228,6 +257,9 @@ def test_sqlite_viewer_page_available(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert "SQLite 数据浏览器" in response.text
     assert "sort-order-select" in response.text
+    assert "reset-button" in response.text
+    assert "grid-view-button" in response.text
+    assert "pagination-controls" in response.text
 
 
 def _set_fixed_now(monkeypatch):
@@ -268,6 +300,7 @@ def test_sqlite_viewer_list_orders_douyin_content_by_create_time_desc(tmp_path, 
     payload = response.json()
 
     assert payload["total"] == 3
+    assert payload["sort_by"] == "created_time"
     assert payload["sort_order"] == "desc"
     assert [item["source_id"] for item in payload["items"]] == ["10003", "10002", "10001"]
     assert payload["items"][0]["title"] == "今日的视频"
@@ -291,6 +324,23 @@ def test_sqlite_viewer_list_orders_douyin_content_by_create_time_asc(tmp_path, m
     assert payload["sort_order"] == "asc"
     assert [item["source_id"] for item in payload["items"]] == ["10001", "10002", "10003"]
     assert payload["items"][0]["title"] == "较早的视频"
+
+
+def test_sqlite_viewer_list_orders_bilibili_content_by_view_count(tmp_path, monkeypatch):
+    db_path = tmp_path / "viewer.db"
+    _prepare_sqlite_db(db_path)
+    monkeypatch.setattr(db_config, "SQLITE_DB_PATH", str(db_path))
+
+    client = TestClient(app)
+    response = client.get(
+        "/api/sqlite-viewer/list",
+        params={"platform": "bili", "entity_type": "content", "sort_by": "view_count", "sort_order": "desc"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sort_by"] == "view_count"
+    assert [item["source_id"] for item in payload["items"]] == ["bv-b", "bv-a"]
 
 
 def test_sqlite_viewer_list_orders_all_creators_by_last_modify_ts_desc(tmp_path, monkeypatch):

@@ -7,90 +7,68 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/sqlite-viewer/static/styles.css">
+  <link rel="stylesheet" href="/sqlite-viewer/static/styles.css?v=9">
 </head>
 <body>
   <div class="page-shell">
     <header class="hero">
-      <div class="hero__eyebrow">MediaCrawler SQLite Viewer</div>
-      <h1>跨平台 SQLite 数据浏览页</h1>
-      <p>聚焦小红书、抖音、Bilibili、微博、知乎，支持内容、评论、创作者的统一列表查看。</p>
+      <div class="hero__content">
+        <div class="hero__title-row">
+          <span class="hero__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v7c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M5 12v7c0 1.7 3.1 3 7 3s7-1.3 7-3v-7"/></svg>
+          </span>
+          <div>
+            <h1>跨平台 SQLite 数据浏览页</h1>
+            <p>聚焦小红书、抖音、Bilibili、微博、知乎，支持内容、评论、创作者的统一列表查看。</p>
+          </div>
+        </div>
+      </div>
+      <div class="hero__art" aria-hidden="true">
+        <div class="hero__art-card">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><ellipse cx="12" cy="5" rx="6" ry="2.6"/><path d="M6 5v6.8c0 1.5 2.7 2.7 6 2.7s6-1.2 6-2.7V5"/><path d="M6 11.8v6.2c0 1.5 2.7 2.7 6 2.7s6-1.2 6-2.7v-6.2"/></svg>
+        </div>
+      </div>
     </header>
 
-    <main class="layout">
-      <section class="control-panel">
+    <main>
+      <section class="control-panel" aria-label="筛选条件">
         <div class="control-panel__row">
-          <label class="field">
-            <span>平台</span>
-            <select id="platform-select"></select>
-          </label>
-
-          <label class="field">
-            <span>数据类型</span>
-            <select id="entity-type-select"></select>
-          </label>
-
-          <label class="field">
-            <span>作者筛选</span>
-            <input id="author-query-input" type="text" placeholder="输入作者名，支持模糊匹配">
-          </label>
-
-          <label class="field">
-            <span>时间筛选</span>
-            <select id="time-filter-select">
-              <option value="all">全部时间</option>
-              <option value="today">当日</option>
-              <option value="week">一周内</option>
-              <option value="custom">自定义时间段</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>排序方式</span>
-            <select id="sort-order-select">
-              <option value="desc" selected>创建时间倒序（最新优先）</option>
-              <option value="asc">创建时间正序（最早优先）</option>
-            </select>
-          </label>
+          <label class="field"><span>平台</span><select id="platform-select"></select></label>
+          <label class="field"><span>数据类型</span><select id="entity-type-select"></select></label>
+          <label class="field field--author"><span>作者筛选</span><input id="author-query-input" type="search" placeholder="输入作者名，支持模糊匹配"></label>
+          <label class="field"><span>时间筛选</span><select id="time-filter-select"><option value="all">全部时间</option><option value="today">当日</option><option value="week">一周内</option><option value="custom">自定义时间段</option></select></label>
+          <label class="field field--sort"><span>排序方式</span><select id="sort-order-select"><option value="created_time:desc" selected>创建时间倒序（最新优先）</option><option value="created_time:asc">创建时间正序（最早优先）</option><option value="view_count:desc">播放量倒序（最高优先）</option><option value="view_count:asc">播放量正序（最低优先）</option></select></label>
         </div>
-
-        <div id="time-filter-hint" class="field-hint">按发布时间筛选当前列表。</div>
-
         <div id="custom-date-range" class="date-range hidden">
-          <label class="field">
-            <span>开始日期</span>
-            <input id="start-date-input" type="date">
-          </label>
-
-          <label class="field">
-            <span>结束日期</span>
-            <input id="end-date-input" type="date">
-          </label>
+          <label class="field"><span>开始日期</span><input id="start-date-input" type="date"></label>
+          <label class="field"><span>结束日期</span><input id="end-date-input" type="date"></label>
+          <p id="time-filter-hint" class="field-hint">按发布时间筛选当前列表。</p>
         </div>
-
-        <div id="summary-bar" class="summary-bar"></div>
+        <div class="control-panel__actions">
+          <button id="reset-button" class="button button--secondary" type="button">重置</button>
+          <button id="refresh-button" class="button button--primary" type="button">刷新</button>
+        </div>
       </section>
+
+      <section id="summary-bar" class="summary-bar" aria-label="数据概览"></section>
 
       <section class="content-panel">
         <div class="toolbar">
-          <div class="toolbar__meta">
-            <span id="result-meta">加载中...</span>
-          </div>
-          <div class="toolbar__actions">
-            <button id="refresh-button" class="button button--ghost" type="button">刷新</button>
+          <p id="result-meta" class="toolbar__meta">加载中...</p>
+          <div class="toolbar__right">
+            <div class="view-toggle" role="group" aria-label="记录展示方式">
+              <button id="grid-view-button" class="view-toggle__button" type="button" aria-pressed="true">网格</button>
+              <button id="list-view-button" class="view-toggle__button" type="button" aria-pressed="false">列表</button>
+            </div>
           </div>
         </div>
-
         <div id="loading-state" class="state state--loading">正在读取 SQLite 数据...</div>
-        <div id="error-state" class="state state--error hidden"></div>
+        <div id="error-state" class="state state--error hidden" role="alert"></div>
         <div id="empty-state" class="state hidden">当前筛选条件下没有数据。</div>
-
         <div id="record-list" class="record-list"></div>
-
-        <div class="pagination">
-          <button id="prev-button" class="button" type="button">上一页</button>
-          <span id="pagination-meta"></span>
-          <button id="next-button" class="button" type="button">下一页</button>
+        <div class="pagination pagination--bottom" aria-label="分页导航">
+          <span id="pagination-meta" class="pagination__meta"></span>
+          <div id="pagination-controls" class="pagination__controls"></div>
         </div>
       </section>
     </main>
@@ -98,24 +76,16 @@
 
   <aside id="detail-drawer" class="detail-drawer hidden" aria-hidden="true">
     <div class="detail-drawer__backdrop" id="drawer-backdrop"></div>
-    <div class="detail-drawer__panel">
+    <div class="detail-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="detail-title">
       <div class="detail-drawer__header">
-        <div>
-          <div id="detail-kicker" class="detail-kicker"></div>
-          <h2 id="detail-title">详情</h2>
-        </div>
-        <button id="drawer-close" class="button button--ghost" type="button">关闭</button>
+        <div><div id="detail-kicker" class="detail-kicker"></div><h2 id="detail-title">详情</h2></div>
+        <button id="drawer-close" class="button button--secondary" type="button">关闭</button>
       </div>
-
       <div id="detail-meta" class="detail-meta"></div>
-
-      <section class="detail-section">
-        <h3>原始字段</h3>
-        <pre id="detail-json" class="detail-json"></pre>
-      </section>
+      <section class="detail-section"><h3>原始字段</h3><pre id="detail-json" class="detail-json"></pre></section>
     </div>
   </aside>
 
-  <script src="/sqlite-viewer/static/app.js"></script>
+  <script src="/sqlite-viewer/static/app.js?v=10"></script>
 </body>
 </html>

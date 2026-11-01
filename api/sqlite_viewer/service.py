@@ -33,6 +33,7 @@ DEFAULT_PAGE = 1
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 SUPPORTED_TIME_FILTERS = ("all", "today", "week", "custom")
+SUPPORTED_SORT_BY = ("created_time", "view_count")
 
 
 def get_sqlite_db_path() -> Path:
@@ -176,6 +177,24 @@ def _build_author_filter(author_query: str | None) -> Dict[str, Any]:
     }
 
 
+def _normalize_sort_by(sort_by: str | None) -> str:
+    normalized_sort_by = (sort_by or "").strip().lower()
+    return normalized_sort_by if normalized_sort_by in SUPPORTED_SORT_BY else "created_time"
+
+
+def _sort_column(sort_by: str) -> str:
+    if sort_by == "view_count":
+        return """
+            COALESCE(
+                CAST(json_extract(stats_json, '$.video_play_count') AS INTEGER),
+                CAST(json_extract(stats_json, '$.view_count') AS INTEGER),
+                CAST(json_extract(stats_json, '$.read_count') AS INTEGER),
+                0
+            )
+        """
+    return "sort_ts"
+
+
 def _normalize_list_row(row: aiosqlite.Row) -> Dict[str, Any]:
     row_data = dict(row)
     return {
@@ -273,12 +292,14 @@ async def list_records(
     author_query: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    sort_by: str = "created_time",
     sort_order: str = "desc",
     page: int = DEFAULT_PAGE,
     page_size: int = DEFAULT_PAGE_SIZE,
 ) -> Dict[str, Any]:
     validate_platform(platform)
     validate_entity_type(entity_type)
+    normalized_sort_by = _normalize_sort_by(sort_by)
     normalized_sort_order = "asc" if (sort_order or "").strip().lower() == "asc" else "desc"
     time_filter_payload = _build_time_filter(time_filter, start_date, end_date)
     author_filter_payload = _build_author_filter(author_query)
@@ -301,6 +322,7 @@ async def list_records(
                 "author_query": author_filter_payload["author_query"],
                 "start_date": time_filter_payload["start_date"],
                 "end_date": time_filter_payload["end_date"],
+                "sort_by": normalized_sort_by,
                 "sort_order": normalized_sort_order,
                 "page": page,
                 "page_size": page_size,
@@ -318,9 +340,10 @@ async def list_records(
         total = int((await count_cursor.fetchone())["total"])
 
         order_dir = "ASC" if normalized_sort_order == "asc" else "DESC"
+        sort_column = _sort_column(normalized_sort_by)
         list_sql = (
             f"SELECT * {filtered_union_sql} "
-            f"ORDER BY sort_ts {order_dir}, record_pk {order_dir} "
+            f"ORDER BY {sort_column} {order_dir}, sort_ts DESC, record_pk {order_dir} "
             "LIMIT ? OFFSET ?"
         )
         list_cursor = await db.execute(
@@ -337,6 +360,7 @@ async def list_records(
             "author_query": author_filter_payload["author_query"],
             "start_date": time_filter_payload["start_date"],
             "end_date": time_filter_payload["end_date"],
+            "sort_by": normalized_sort_by,
             "sort_order": normalized_sort_order,
             "page": page,
             "page_size": page_size,
