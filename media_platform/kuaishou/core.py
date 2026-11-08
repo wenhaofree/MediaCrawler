@@ -443,6 +443,8 @@ class KuaishouCrawler(AbstractCrawler):
             return browser_context
 
         except Exception as e:
+            if config.CDP_ATTACH_ONLY:
+                raise
             utils.logger.error(
                 f"[KuaishouCrawler] CDP mode launch failed, fallback to standard mode: {e}"
             )

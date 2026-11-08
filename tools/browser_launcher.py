@@ -197,12 +197,9 @@ class BrowserLauncher:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(1)
-                    result = s.connect_ex(('localhost', debug_port))
-                    if result == 0:
-                        utils.logger.info(f"[BrowserLauncher] Browser is ready on port {debug_port}")
-                        return True
+                with socket.create_connection(('localhost', debug_port), timeout=1):
+                    utils.logger.info(f"[BrowserLauncher] Browser is ready on port {debug_port}")
+                    return True
             except Exception:
                 pass
 

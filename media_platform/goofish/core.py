@@ -141,6 +141,8 @@ class GooFishCrawler(AbstractCrawler):
             utils.logger.info(f"[GooFishCrawler] CDP browser info: {await self.cdp_manager.get_browser_info()}")
             return browser_context
         except Exception as e:
+            if config.CDP_ATTACH_ONLY:
+                raise
             utils.logger.error(f"[GooFishCrawler] CDP launch failed, fallback to standard mode: {e}")
             return await self.launch_browser(playwright.chromium, playwright_proxy, user_agent, headless)
 

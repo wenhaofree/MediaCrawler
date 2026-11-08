@@ -264,11 +264,17 @@ uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type grossi
 
 source .venv/bin/activate
 
-<!-- 启动 -->
+<!-- 启动（二选一，同一时刻只能有一个实例占用 9222 端口） -->
 
+# 选项 1：投资配置环境
+# open -na "Google Chrome" --args \
+#  --remote-debugging-port=9222 \
+#  --user-data-dir="$HOME/.chrome-cdp-investing"
+
+# 选项 2：自动化爬虫环境（常用）
 open -na "Google Chrome" --args \
  --remote-debugging-port=9222 \
- --user-data-dir="$HOME/.chrome-cdp-investing"
+ --user-data-dir="$HOME/.chrome-automation"
 
 <!-- 哔哩 -->
 

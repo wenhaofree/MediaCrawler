@@ -181,5 +181,7 @@ class QimaiCrawler(AbstractCrawler):
                 headless=headless,
             )
         except Exception as exc:
+            if config.CDP_ATTACH_ONLY:
+                raise
             utils.logger.error(f"[QimaiCrawler] CDP launch failed, fallback to standard mode: {exc}")
             return await self.launch_browser(playwright.chromium, playwright_proxy, user_agent, headless)

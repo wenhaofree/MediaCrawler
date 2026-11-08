@@ -606,6 +606,8 @@ class BilibiliCrawler(AbstractCrawler):
             return browser_context
 
         except Exception as e:
+            if config.CDP_ATTACH_ONLY:
+                raise
             utils.logger.error(f"[BilibiliCrawler] CDP mode launch failed, fallback to standard mode: {e}")
             # Fallback to standard mode
             chromium = playwright.chromium
