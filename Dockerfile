@@ -10,12 +10,15 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# 1. 安装基础工具与 Node.js 20 (运行签名服务)
+# 1. 安装基础工具、OpenCV 运行依赖与 Node.js 20 (运行签名服务)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     build-essential \
     ca-certificates \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
