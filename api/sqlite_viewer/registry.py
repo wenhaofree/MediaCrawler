@@ -168,7 +168,7 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
         "creator": ViewerTableConfig(
             platform="dy",
             entity_type="creator",
-            table_name="dy_creator",
+            table_name="douyin_creator",
             pk_field="id",
             source_id_expr="user_id",
             title_expr="COALESCE(NULLIF(nickname, ''), CAST(user_id AS TEXT))",

@@ -374,3 +374,12 @@ uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type free -
 <!-- 启动服务 -->
 
 uv run uvicorn api.main:app --port 8080 --reload
+
+<!-- 数据库初始化（如需使用 PostgreSQL） -->
+
+# 确保 .env 中配置了正确的数据库连接信息，然后执行：
+uv run main.py --init_db postgres
+
+> 说明：抖音作者表已统一规范命名为 `douyin_creator`（原 `dy_creator` 会在建表/升级时自动无损重命名迁移，代码中保留 `DyCreator = DouyinCreator` 兼容别名）。
+
+

@@ -117,6 +117,27 @@ def _migrate_missing_columns(sync_conn):
                         pass
 
 
+def _rename_legacy_tables(sync_conn):
+    """
+    Rename legacy table names to standardized platform table names (e.g. dy_creator -> douyin_creator).
+    """
+    from sqlalchemy import inspect
+    inspector = inspect(sync_conn)
+    existing_tables = set(inspector.get_table_names())
+    legacy_renames = [
+        ("dy_creator", "douyin_creator"),
+    ]
+    for old_name, new_name in legacy_renames:
+        if old_name in existing_tables and new_name not in existing_tables:
+            try:
+                sync_conn.execute(text(f'ALTER TABLE "{old_name}" RENAME TO "{new_name}"'))
+            except Exception:
+                try:
+                    sync_conn.execute(text(f"ALTER TABLE {old_name} RENAME TO {new_name}"))
+                except Exception:
+                    pass
+
+
 async def create_tables(db_type: str = None):
     if db_type is None:
         db_type = config.SAVE_DATA_OPTION
@@ -124,6 +145,7 @@ async def create_tables(db_type: str = None):
     engine = get_async_engine(db_type)
     if engine:
         async with engine.begin() as conn:
+            await conn.run_sync(_rename_legacy_tables)
             await conn.run_sync(Base.metadata.create_all)
             await conn.run_sync(_migrate_missing_columns)
 

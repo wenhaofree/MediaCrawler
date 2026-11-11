@@ -46,7 +46,7 @@ def _prepare_sqlite_db(db_path):
             source_keyword TEXT
         );
 
-        CREATE TABLE dy_creator (
+        CREATE TABLE douyin_creator (
             id INTEGER PRIMARY KEY,
             user_id TEXT,
             nickname TEXT,
@@ -184,7 +184,7 @@ def _prepare_sqlite_db(db_path):
 
     conn.execute(
         """
-        INSERT INTO dy_creator (
+        INSERT INTO douyin_creator (
             id, user_id, nickname, avatar, ip_location, add_ts, last_modify_ts, "desc",
             gender, follows, fans, interaction, videos_count
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -507,3 +507,46 @@ def test_sqlite_viewer_rejects_invalid_filters(tmp_path, monkeypatch):
         params={"platform": "dy", "entity_type": "content", "time_filter": "custom"},
     )
     assert response.status_code == 400
+
+
+def test_sqlite_viewer_legacy_dy_creator_fallback(tmp_path, monkeypatch):
+    db_path = tmp_path / "legacy_viewer.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE dy_creator (
+            id INTEGER PRIMARY KEY,
+            user_id TEXT,
+            nickname TEXT,
+            avatar TEXT,
+            ip_location TEXT,
+            add_ts INTEGER,
+            last_modify_ts INTEGER,
+            "desc" TEXT,
+            gender TEXT,
+            follows TEXT,
+            fans TEXT,
+            interaction TEXT,
+            videos_count TEXT
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO dy_creator (
+            id, user_id, nickname, avatar, ip_location, add_ts, last_modify_ts, "desc",
+            gender, follows, fans, interaction, videos_count
+        ) VALUES (1, 'legacy_uid', '旧版作者', '', '北京', 1000, 2000, '老表测试', 'Male', '1', '10', '100', '5')
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(db_config, "SQLITE_DB_PATH", str(db_path))
+    client = TestClient(app)
+    response = client.get("/api/sqlite-viewer/list", params={"platform": "dy", "entity_type": "creator"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["author_name"] == "旧版作者"
+

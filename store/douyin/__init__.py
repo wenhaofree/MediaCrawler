@@ -168,5 +168,29 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
 
 
 async def save_creator(user_id: str, creator: Dict):
-    # 教学版：创作者个人资料(昵称/性别/头像/签名/IP/粉丝数等)不再落库，防骚扰。
-    return
+    user_info = creator.get("user", {})
+    gender_map = {0: "Unknown", 1: "Male", 2: "Female"}
+    avatar_uri = user_info.get("avatar_300x300", {}).get("uri")
+    avatar = ""
+    if avatar_uri:
+        avatar = f"https://p3-pc.douyinpic.com/img/{avatar_uri}~c5_300x300.jpeg?from=2956013662"
+    elif user_info.get("avatar_larger", {}).get("url_list"):
+        avatar = user_info.get("avatar_larger", {}).get("url_list", [""])[0]
+    elif user_info.get("avatar_thumb", {}).get("url_list"):
+        avatar = user_info.get("avatar_thumb", {}).get("url_list", [""])[0]
+
+    local_db_item = {
+        "user_id": user_id,
+        "nickname": user_info.get("nickname"),
+        "gender": gender_map.get(user_info.get("gender"), "Unknown"),
+        "avatar": avatar,
+        "desc": user_info.get("signature"),
+        "ip_location": user_info.get("ip_location"),
+        "follows": str(user_info.get("following_count", 0)),
+        "fans": str(user_info.get("max_follower_count", 0)),
+        "interaction": str(user_info.get("total_favorited", 0)),
+        "videos_count": str(user_info.get("aweme_count", 0)),
+        "last_modify_ts": utils.get_current_timestamp(),
+    }
+    utils.logger.info(f"[store.douyin.save_creator] creator:{local_db_item}")
+    await DouyinStoreFactory.create_store().store_creator(local_db_item)

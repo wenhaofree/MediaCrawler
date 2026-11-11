@@ -47,12 +47,12 @@ def test_orm_has_required_user_columns():
         assert "creator_hash" in cols, f"{t} 缺少 creator_hash 列"
 
 
-def test_creator_tables_removed():
+def test_creator_tables_exist():
     import database.models as m
-    removed = {"XhsCreator", "DyCreator", "WeiboCreator", "TiebaCreator",
-               "ZhihuCreator", "BilibiliUpInfo", "BilibiliContactInfo"}
-    for t in removed:
-        assert not hasattr(m, t), f"creator 档案表 {t} 仍存在"
+    creator_tables = {"XhsCreator", "DyCreator", "WeiboCreator", "TiebaCreator",
+                      "ZhihuCreator", "BilibiliUpInfo", "BilibiliContactInfo"}
+    for t in creator_tables:
+        assert hasattr(m, t), f"creator 档案表 {t} 缺失"
 
 
 def test_content_tables_have_creator_hash():

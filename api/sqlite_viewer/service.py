@@ -57,6 +57,16 @@ async def _get_existing_tables(db: aiosqlite.Connection) -> Set[str]:
     return {row[0] for row in rows}
 
 
+from dataclasses import replace
+
+def _resolve_effective_config(config: ViewerTableConfig, existing_tables: Set[str]) -> ViewerTableConfig:
+    """Resolve legacy table names if the modern table name does not exist."""
+    if config.table_name not in existing_tables:
+        if config.table_name == "douyin_creator" and "dy_creator" in existing_tables:
+            return replace(config, table_name="dy_creator")
+    return config
+
+
 def _list_select_sql(config: ViewerTableConfig) -> str:
     return f"""
         SELECT
@@ -235,7 +245,7 @@ async def get_options() -> Dict[str, Any]:
 
         for platform in SUPPORTED_PLATFORMS:
             for entity_type in SUPPORTED_ENTITY_TYPES:
-                config = get_config(platform, entity_type)
+                config = _resolve_effective_config(get_config(platform, entity_type), existing_tables)
                 if config.table_name not in existing_tables:
                     continue
                 cursor = await db.execute(f"SELECT COUNT(1) FROM {config.table_name}")
@@ -279,7 +289,8 @@ async def get_options() -> Dict[str, Any]:
 
 
 def _build_union_sql(configs: Iterable[ViewerTableConfig], existing_tables: Set[str]) -> str:
-    queries = [_list_select_sql(config) for config in configs if config.table_name in existing_tables]
+    resolved_configs = [_resolve_effective_config(config, existing_tables) for config in configs]
+    queries = [_list_select_sql(config) for config in resolved_configs if config.table_name in existing_tables]
     if not queries:
         return ""
     return "\nUNION ALL\n".join(queries)
@@ -379,6 +390,7 @@ async def get_record_detail(platform: str, entity_type: str, record_pk: str) -> 
 
     async with _get_connection() as db:
         existing_tables = await _get_existing_tables(db)
+        config = _resolve_effective_config(config, existing_tables)
         if config.table_name not in existing_tables:
             raise LookupError("Table not found")
 

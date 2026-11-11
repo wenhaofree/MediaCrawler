@@ -19,6 +19,10 @@
 
 
 import os
+from dotenv import load_dotenv
+
+# Automatically load environment variables from .env file
+load_dotenv()
 
 # mysql config
 MYSQL_DB_PWD = os.getenv("MYSQL_DB_PWD", "123456")
