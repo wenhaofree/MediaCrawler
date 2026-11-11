@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL 关系型数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: mediacrawler-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_DB_PWD:-123456}
+      POSTGRES_DB: ${POSTGRES_DB_NAME:-media_crawler}
+      TZ: Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_DB_USER:-postgres} -d ${POSTGRES_DB_NAME:-media_crawler}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. MediaCrawler API 核心采集服务 (集成 FastAPI + Node 签名微服务)
+  mediacrawler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediacrawler-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      # 数据库连接（自动连接上面的 postgres 容器服务）
+      POSTGRES_DB_HOST: postgres
+      POSTGRES_DB_PORT: 5432
+      POSTGRES_DB_USER: ${POSTGRES_DB_USER:-postgres}
+      POSTGRES_DB_PWD: ${POSTGRES_DB_PWD:-123456}
+      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-media_crawler}
+      SAVE_DATA_OPTION: postgres
+      # 自动建表与迁移
+      AUTO_INIT_DB: "true"
+      # 时区设置
+      TZ: Asia/Shanghai
+    volumes:
+      # 挂载数据与日志目录（避免容器销毁导致数据丢失）
+      - ./data:/app/data
+      # 挂载配置文件（方便在宿主机修改 Cookie 与配置而无需重新打镜像）
+      - ./.env:/app/.env:ro
+      - ./config/base_config.py:/app/config/base_config.py:ro
+
+volumes:
+  pgdata:
+    driver: local
+

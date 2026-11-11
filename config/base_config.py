@@ -54,7 +54,7 @@ SAVE_LOGIN_STATE = True
 
 # ==================== 纯 API 模式与签名微服务配置 ====================
 # 是否启用纯 API 模式 (无需启动浏览器/无需 Playwright/无需 9222 端口)
-ENABLE_PURE_API_MODE = False
+ENABLE_PURE_API_MODE = True
 
 # 是否启用 Node.js 签名微服务 (默认开启，若微服务未启动会自动降级为本地 execjs 引擎)
 ENABLE_SIGN_SERVICE = True

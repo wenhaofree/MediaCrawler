@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from .routers import crawler_router, data_router, websocket_router
+from .routers import crawler_router, data_router, websocket_router, douyin_router
 from .sqlite_viewer import sqlite_viewer_router
 from .scheduled_tasks import scheduled_tasks_router
 from .scheduled_tasks.service import scheduled_task_service
@@ -69,6 +69,7 @@ app.add_middleware(
 app.include_router(crawler_router, prefix="/api")
 app.include_router(data_router, prefix="/api")
 app.include_router(websocket_router, prefix="/api")
+app.include_router(douyin_router, prefix="/api")
 app.include_router(sqlite_viewer_router)
 app.include_router(scheduled_tasks_router)
 
