@@ -1,0 +1,17 @@
+{
+  "name": "mediacrawler-sign-service",
+  "version": "1.0.0",
+  "description": "Zero-dependency Node.js signature microservice for MediaCrawler",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "mediacrawler",
+    "signature",
+    "douyin"
+  ],
+  "author": "MediaCrawler",
+  "license": "ISC"
+}
+

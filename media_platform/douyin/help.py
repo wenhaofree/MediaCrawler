@@ -33,6 +33,7 @@ from playwright.async_api import Page
 
 from model.m_douyin import VideoUrlInfo, CreatorUrlInfo
 from tools.crawler_util import extract_url_params_to_dict
+from tools.sign_client import SignServiceClient
 
 douyin_sign_obj = execjs.compile(open('libs/douyin.js', encoding='utf-8-sig').read())
 
@@ -57,11 +58,20 @@ def get_web_id():
     return web_id.replace('-', '')[:19]
 
 
+def generate_ms_token(length: int = 107) -> str:
+    """Generate random msToken for Douyin API requests"""
+    chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+    return "".join(random.choices(chars, k=length))
 
-async def get_a_bogus(url: str, params: str, post_data: dict, user_agent: str, page: Page = None):
+
+async def get_a_bogus(url: str, params: str, post_data: dict, user_agent: str, page: Optional[Page] = None):
     """
-    Get a_bogus parameter, currently does not support POST request type signature
+    Get a_bogus parameter, currently does not support POST request type signature.
+    Prefers Node.js sign microservice if available, falls back to local execjs.
     """
+    sign = await SignServiceClient.get_douyin_a_bogus(url, params, user_agent)
+    if sign:
+        return sign
     return get_a_bogus_from_js(url, params, user_agent)
 
 def get_a_bogus_from_js(url: str, params: str, user_agent: str):

@@ -38,20 +38,26 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import douyin as douyin_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
+from tools.httpx_util import make_async_client
 from var import crawler_type_var, source_keyword_var
 
 from . import media as douyin_media
 from .client import DouYinClient
 from .exception import DataFetchError
 from .field import PublishTimeType
-from .help import parse_video_info_from_url, parse_creator_info_from_url
+from .help import (
+    parse_video_info_from_url,
+    parse_creator_info_from_url,
+    get_web_id,
+    generate_ms_token,
+)
 from .login import DouYinLogin
 
 
 class DouYinCrawler(AbstractCrawler):
-    context_page: Page
+    context_page: Optional[Page]
     dy_client: DouYinClient
-    browser_context: BrowserContext
+    browser_context: Optional[BrowserContext]
     cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self) -> None:
@@ -63,9 +69,81 @@ class DouYinCrawler(AbstractCrawler):
             "https://douhot.douyin.com",
             "https://live.douyin.com",
         ]
+        self.context_page = None
+        self.browser_context = None
         self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool for automatic proxy refresh
         self._media_downloader: Optional[MediaDownloader] = None
+
+    async def init_pure_api_session(self, proxy: Optional[str] = None) -> Tuple[str, Dict]:
+        """
+        Initialize guest cookies and headers via HTTP handshake without browser.
+        If config.COOKIES is provided, it merges user cookies.
+        """
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        cookie_dict: Dict[str, str] = {}
+
+        # 1. Parse configured cookies if provided
+        if config.COOKIES:
+            cookie_dict.update(utils.convert_str_cookie_to_dict(config.COOKIES))
+
+        # 2. HTTP handshake to get initial guest cookies (ttwid, passport_csrf_token, etc.)
+        try:
+            async with make_async_client(proxy=proxy) as client:
+                resp = await client.get(
+                    self.index_url,
+                    headers={"User-Agent": user_agent},
+                    follow_redirects=True,
+                    timeout=10,
+                )
+                for k, v in resp.cookies.items():
+                    cookie_dict.setdefault(k, v)
+        except Exception as exc:
+            utils.logger.warning(f"[DouYinCrawler.init_pure_api_session] Handshake warning: {exc}")
+
+        # 3. Ensure essential Douyin client identifiers
+        cookie_dict.setdefault("webid", get_web_id())
+        cookie_dict.setdefault("msToken", generate_ms_token())
+
+        cookie_str = "; ".join([f"{k}={v}" for k, v in cookie_dict.items()])
+        return cookie_str, cookie_dict
+
+    async def start_pure_api(self, httpx_proxy_format: Optional[str]) -> None:
+        cookie_str, cookie_dict = await self.init_pure_api_session(httpx_proxy_format)
+        if not config.COOKIES:
+            utils.logger.info(
+                "[DouYinCrawler.start_pure_api] 未提供 --cookies，已通过访客会话握手初始化凭据。"
+                "若目标接口有登录权限限制，可通过 --cookies 传入有效 Cookie。"
+            )
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        headers = {
+            "User-Agent": user_agent,
+            "Cookie": cookie_str,
+            "Host": "www.douyin.com",
+            "Origin": "https://www.douyin.com/",
+            "Referer": "https://www.douyin.com/",
+            "Content-Type": "application/json;charset=UTF-8",
+        }
+        self.dy_client = DouYinClient(
+            headers=headers,
+            playwright_page=None,
+            cookie_dict=cookie_dict,
+            proxy=httpx_proxy_format,
+            proxy_ip_pool=self.ip_proxy_pool,
+        )
+
+        crawler_type_var.set(config.CRAWLER_TYPE)
+        if config.CRAWLER_TYPE == "search":
+            # Search for notes and retrieve their comment information.
+            await self.search()
+        elif config.CRAWLER_TYPE == "detail":
+            # Get the information and comments of the specified post
+            await self.get_specified_awemes()
+        elif config.CRAWLER_TYPE == "creator":
+            # Get the information and comments of the specified creator
+            await self.get_creators_and_videos()
+
+        utils.logger.info("[DouYinCrawler.start_pure_api] Douyin Pure API Crawler finished ...")
 
     async def start(self) -> None:
         playwright_proxy_format, httpx_proxy_format = None, None
@@ -73,6 +151,11 @@ class DouYinCrawler(AbstractCrawler):
             self.ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
             ip_proxy_info: IpInfoModel = await self.ip_proxy_pool.get_proxy()
             playwright_proxy_format, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
+
+        if getattr(config, "ENABLE_PURE_API_MODE", False):
+            utils.logger.info("[DouYinCrawler] 启用纯 API 模式 (无浏览器/无 Playwright/无需 9222 端口)")
+            await self.start_pure_api(httpx_proxy_format)
+            return
 
         async with async_playwright() as playwright:
             # Select startup mode based on configuration
@@ -295,9 +378,14 @@ class DouYinCrawler(AbstractCrawler):
                 utils.logger.error(f"[DouYinCrawler.get_creators_and_videos] Failed to parse creator URL: {e}")
                 continue
 
-            creator_info: Dict = await self.dy_client.get_user_info(user_id)
-            if creator_info:
-                await douyin_store.save_creator(user_id, creator=creator_info)
+            try:
+                creator_info: Dict = await self.dy_client.get_user_info(user_id)
+                if creator_info:
+                    await douyin_store.save_creator(user_id, creator=creator_info)
+            except DataFetchError as ex:
+                utils.logger.warning(
+                    f"[DouYinCrawler.get_creators_and_videos] Could not fetch creator profile for {user_id}: {ex}. Proceeding to fetch videos..."
+                )
 
             # Get all video information of the creator
             try:

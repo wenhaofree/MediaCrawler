@@ -361,6 +361,24 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 show_default=True,
             ),
         ] = str(config.CDP_ATTACH_ONLY),
+        pure_api: Annotated[
+            str,
+            typer.Option(
+                "--pure_api",
+                help="Whether to enable pure API mode (no browser / Playwright / 9222 needed), supports yes/true/t/y/1 or no/false/f/n/0",
+                rich_help_panel="Runtime Configuration",
+                show_default=True,
+            ),
+        ] = str(config.ENABLE_PURE_API_MODE),
+        sign_service_url: Annotated[
+            str,
+            typer.Option(
+                "--sign_service_url",
+                help="Node.js signature microservice URL, default is http://127.0.0.1:8999",
+                rich_help_panel="Runtime Configuration",
+                show_default=True,
+            ),
+        ] = config.SIGN_SERVICE_URL,
         qimai_rank_type: Annotated[
             str,
             typer.Option(
@@ -439,6 +457,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.IP_PROXY_PROVIDER_NAME = ip_proxy_provider_name
         config.STATIC_PROXY_URL = static_proxy_url
         config.CDP_ATTACH_ONLY = enable_cdp_attach_only
+        config.ENABLE_PURE_API_MODE = _to_bool(pure_api)
+        config.SIGN_SERVICE_URL = sign_service_url
         config.QIMAI_RANK_TYPE = qimai_rank_type
         config.QIMAI_RANK_DATE = qimai_rank_date
         config.QIMAI_RANK_GENRE = qimai_rank_genre
@@ -504,6 +524,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             creator_id=creator_id,
             max_pages=config.CRAWLER_MAX_PAGES,
             cdp_attach_only=config.CDP_ATTACH_ONLY,
+            pure_api=config.ENABLE_PURE_API_MODE,
+            sign_service_url=config.SIGN_SERVICE_URL,
             qimai_rank_type=config.QIMAI_RANK_TYPE,
             qimai_rank_date=config.QIMAI_RANK_DATE,
             qimai_rank_genre=config.QIMAI_RANK_GENRE,

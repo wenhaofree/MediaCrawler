@@ -54,7 +54,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         proxy=None,
         *,
         headers: Dict,
-        playwright_page: Optional[Page],
+        playwright_page: Optional[Page] = None,
         cookie_dict: Dict,
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -94,7 +94,20 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         if not params:
             return
         headers = headers or self.headers
-        local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+        local_storage: Dict = {}
+        if self.playwright_page:
+            try:
+                local_storage = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+            except Exception:
+                local_storage = {}
+
+        ms_token = (
+            self.cookie_dict.get("msToken")
+            or self.cookie_dict.get("xmst")
+            or local_storage.get("xmst")
+            or generate_ms_token()
+        )
+
         common_params = {
             "device_platform": "webapp",
             "aid": "6383",
@@ -120,8 +133,8 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             "screen_height": "1440",
             'effective_type': '4g',
             "round_trip_time": "50",
-            "webid": get_web_id(),
-            "msToken": local_storage.get("xmst"),
+            "webid": self.cookie_dict.get("webid") or get_web_id(),
+            "msToken": ms_token,
         }
         params.update(common_params)
         query_string = urllib.parse.urlencode(params)
@@ -163,11 +176,11 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
             raise DataFetchError("Request failed without a response")
         try:
             if response.text == "" or response.text == "blocked":
-                utils.logger.error(f"request params incrr, response.text: {response.text}")
-                raise Exception("account blocked")
+                utils.logger.error(f"request params incrr, status_code: {response.status_code}, response.text: {response.text}")
+                raise Exception(f"account blocked (status {response.status_code})")
             return response.json()
         except Exception as e:
-            raise DataFetchError(f"{e}, {response.text}")
+            raise DataFetchError(f"{e}, status: {response.status_code}, body: {response.text}")
 
     async def get(self, uri: str, params: Optional[Dict] = None, headers: Optional[Dict] = None):
         """
@@ -182,16 +195,25 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         headers = headers or self.headers
         return await self.request(method="POST", url=f"{self._host}{uri}", data=data, headers=headers)
 
-    async def pong(self, browser_context: BrowserContext) -> bool:
-        local_storage = await self.playwright_page.evaluate("() => window.localStorage")
-        if local_storage.get("HasUserLogin", "") == "1":
-            return True
+    async def pong(self, browser_context: Optional[BrowserContext] = None) -> bool:
+        if self.playwright_page and browser_context:
+            try:
+                local_storage = await self.playwright_page.evaluate("() => window.localStorage")
+                if local_storage.get("HasUserLogin", "") == "1":
+                    return True
 
-        _, cookie_dict = await utils.convert_browser_context_cookies(
-            browser_context,
-            urls=self.cookie_urls,
-        )
-        return cookie_dict.get("LOGIN_STATUS") == "1"
+                _, cookie_dict = await utils.convert_browser_context_cookies(
+                    browser_context,
+                    urls=self.cookie_urls,
+                )
+                return cookie_dict.get("LOGIN_STATUS") == "1"
+            except Exception:
+                pass
+
+        # Pure API or fallback pong check: check cookies
+        if self.cookie_dict.get("LOGIN_STATUS") == "1" or self.cookie_dict.get("sessionid"):
+            return True
+        return False
 
     async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
         cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
