@@ -148,10 +148,8 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
 
     async def _get_wbi_keys_from_page(self) -> Optional[Tuple[str, str]]:
         try:
-            wbi_img_urls = ""
-        try:
             local_storage = await self.playwright_page.evaluate("() => window.localStorage")
-            except Exception as exc:
+        except Exception as exc:
             if self._is_page_unavailable_error(exc):
                 utils.logger.warning(
                     "[BilibiliClient.get_wbi_keys] Playwright page is unavailable, "
@@ -171,9 +169,6 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
             if img_url_from_storage and sub_url_from_storage:
                 wbi_img_urls = f"{img_url_from_storage}-{sub_url_from_storage}"
 
-except Exception:
-            # The page/context may have been closed (e.g. TargetClosedError); fall back to the nav API below.
-            wbi_img_urls = ""
         if not wbi_img_urls or "-" not in wbi_img_urls:
             return None
 
@@ -193,9 +188,11 @@ except Exception:
             self._cached_wbi_keys = page_keys
             return page_keys
 
-        resp = await self.request(method="GET", url=self._host + "/x/web-interface/nav",
-                headers=self.headers,
-            )
+        resp = await self.request(
+            method="GET",
+            url=self._host + "/x/web-interface/nav",
+            headers=self.headers,
+        )
         try:
             img_url: str = resp["wbi_img"]["img_url"]
             sub_url: str = resp["wbi_img"]["sub_url"]
