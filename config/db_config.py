@@ -73,11 +73,28 @@ mongodb_config = {
 }
 
 # postgres config
-POSTGRES_DB_PWD = os.getenv("POSTGRES_DB_PWD", "123456")
-POSTGRES_DB_USER = os.getenv("POSTGRES_DB_USER", "postgres")
-POSTGRES_DB_HOST = os.getenv("POSTGRES_DB_HOST", "localhost")
-POSTGRES_DB_PORT = os.getenv("POSTGRES_DB_PORT", 5432)
-POSTGRES_DB_NAME = os.getenv("POSTGRES_DB_NAME", "media_crawler")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if DATABASE_URL:
+    try:
+        from urllib.parse import urlparse
+        _parsed = urlparse(DATABASE_URL)
+        POSTGRES_DB_USER = _parsed.username or os.getenv("POSTGRES_DB_USER", "postgres")
+        POSTGRES_DB_PWD = _parsed.password or os.getenv("POSTGRES_DB_PWD", "123456")
+        POSTGRES_DB_HOST = _parsed.hostname or os.getenv("POSTGRES_DB_HOST", "localhost")
+        POSTGRES_DB_PORT = _parsed.port or int(os.getenv("POSTGRES_DB_PORT", 5432))
+        POSTGRES_DB_NAME = _parsed.path.lstrip("/") or os.getenv("POSTGRES_DB_NAME", "media_crawler")
+    except Exception:
+        POSTGRES_DB_PWD = os.getenv("POSTGRES_DB_PWD", "123456")
+        POSTGRES_DB_USER = os.getenv("POSTGRES_DB_USER", "postgres")
+        POSTGRES_DB_HOST = os.getenv("POSTGRES_DB_HOST", "localhost")
+        POSTGRES_DB_PORT = int(os.getenv("POSTGRES_DB_PORT", 5432))
+        POSTGRES_DB_NAME = os.getenv("POSTGRES_DB_NAME", "media_crawler")
+else:
+    POSTGRES_DB_PWD = os.getenv("POSTGRES_DB_PWD", "123456")
+    POSTGRES_DB_USER = os.getenv("POSTGRES_DB_USER", "postgres")
+    POSTGRES_DB_HOST = os.getenv("POSTGRES_DB_HOST", "localhost")
+    POSTGRES_DB_PORT = int(os.getenv("POSTGRES_DB_PORT", 5432))
+    POSTGRES_DB_NAME = os.getenv("POSTGRES_DB_NAME", "media_crawler")
 
 postgres_db_config = {
     "user": POSTGRES_DB_USER,
