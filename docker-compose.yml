@@ -25,8 +25,21 @@ services:
       AUTO_INIT_DB: "true"
       TZ: Asia/Shanghai
 
+      # 4. 调度元数据持久化到挂载目录（容器重建后定时任务不丢）
+      SQLITE_DB_PATH: /app/data/sqlite_tables.db
+
+      # 5. Docker 启动后自动写入抖音增长快照定时任务（纯 API，无需 Chrome）
+      AUTO_SEED_DY_SCHEDULE: "${AUTO_SEED_DY_SCHEDULE:-true}"
+      SCHEDULED_CRAWL_PURE_API: "${SCHEDULED_CRAWL_PURE_API:-true}"
+      DY_SCHEDULE_RUN_TIME: "${DY_SCHEDULE_RUN_TIME:-09:00,14:00,22:30}"
+      DY_SCHEDULE_MAX_PAGES: "${DY_SCHEDULE_MAX_PAGES:-3}"
+      DY_SCHEDULE_SAVE_OPTION: "${DY_SCHEDULE_SAVE_OPTION:-postgres}"
+      DY_SCHEDULE_TASK_NAME: "${DY_SCHEDULE_TASK_NAME:-抖音增长快照(自动)}"
+      # 逗号分隔 sec_uid；请在 .env 中覆盖为你的账号列表
+      DY_SCHEDULE_CREATOR_IDS: "${DY_SCHEDULE_CREATOR_IDS:-MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk,MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5,MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU}"
+
     volumes:
-      # 挂载宿主机数据与日志目录（防止容器重启数据丢失）
+      # 挂载宿主机数据与日志目录（防止容器重启数据丢失；含调度 SQLite）
       - ./data:/app/data
       # 挂载本地配置文件（随时在宿主机修改 Cookie，无需重新打镜像）
       - ./.env:/app/.env:ro

@@ -48,8 +48,8 @@
             </label>
 
             <label class="field">
-              <span>每日执行时间</span>
-              <input id="task-run-time" type="time" value="09:00">
+              <span>每日执行时间（可多时段，逗号分隔）</span>
+              <input id="task-run-time" type="text" value="09:00,14:00,22:30" placeholder="09:00,14:00,22:30">
             </label>
           </div>
 
@@ -62,6 +62,7 @@
             <label class="field">
               <span>保存方式</span>
               <select id="task-save-option">
+                <option value="postgres">PostgreSQL</option>
                 <option value="sqlite">SQLite</option>
                 <option value="jsonl">JSONL</option>
                 <option value="json">JSON</option>

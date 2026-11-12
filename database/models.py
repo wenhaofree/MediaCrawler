@@ -25,7 +25,7 @@
 # 创作者个人档案表（XhsCreator/DyCreator/WeiboCreator/TiebaCreator/
 # ZhihuCreator/BilibiliUpInfo/BilibiliContactInfo）已整体移除。
 
-from sqlalchemy import create_engine, Column, Integer, Text, String, BigInteger
+from sqlalchemy import create_engine, Column, Integer, Text, String, BigInteger, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -191,6 +191,42 @@ class DouyinCreator(Base):
     fans = Column(Text, comment='粉丝数')
     interaction = Column(Text, comment='互动数')
     videos_count = Column(String(255), comment='视频数量')
+
+
+class DouyinCreatorStats(Base):
+    """Append-only creator follower/engagement snapshots for growth analysis."""
+    __tablename__ = 'douyin_creator_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    user_id = Column(String(255), nullable=False, index=True, comment='作者ID(sec_uid)')
+    follower_count = Column(BigInteger, comment='粉丝数')
+    following_count = Column(BigInteger, comment='关注数')
+    total_likes = Column(BigInteger, comment='总获赞数')
+    aweme_count = Column(BigInteger, comment='作品总数')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段 morning/afternoon/evening/manual')
+    source_type = Column(String(32), default='creator_crawl', comment='数据来源')
+    __table_args__ = (
+        Index('idx_dy_creator_stats_user_collected', 'user_id', 'collected_at'),
+    )
+
+
+class DouyinAwemeStats(Base):
+    """Append-only aweme engagement snapshots for growth trend analysis."""
+    __tablename__ = 'douyin_aweme_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    aweme_id = Column(String(255), nullable=False, index=True, comment='作品ID')
+    liked_count = Column(BigInteger, comment='点赞数')
+    comment_count = Column(BigInteger, comment='评论数')
+    collected_count = Column(BigInteger, comment='收藏数')
+    share_count = Column(BigInteger, comment='分享数')
+    play_count = Column(BigInteger, nullable=True, comment='播放数(可空)')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段 morning/afternoon/evening/manual')
+    source_type = Column(String(32), default='detail', comment='数据来源')
+    __table_args__ = (
+        Index('idx_dy_aweme_stats_aweme_collected', 'aweme_id', 'collected_at'),
+    )
+
 
 # Backward compatibility alias
 DyCreator = DouyinCreator
@@ -602,6 +638,7 @@ class ScheduledCrawlRun(Base):
     task_id = Column(Integer, nullable=False, index=True, comment='任务ID')
     status = Column(String(16), nullable=False, index=True, comment='执行状态')
     trigger_type = Column(String(16), nullable=False, default='schedule', comment='触发方式')
+    scheduled_slot = Column(String(32), nullable=False, default='manual', comment='采集时段')
     started_at = Column(Text, nullable=False, comment='开始时间')
     finished_at = Column(Text, comment='结束时间')
     error_message = Column(Text, comment='错误信息')

@@ -245,7 +245,10 @@ async def get_options() -> Dict[str, Any]:
 
         for platform in SUPPORTED_PLATFORMS:
             for entity_type in SUPPORTED_ENTITY_TYPES:
-                config = _resolve_effective_config(get_config(platform, entity_type), existing_tables)
+                try:
+                    config = _resolve_effective_config(get_config(platform, entity_type), existing_tables)
+                except ValueError:
+                    continue
                 if config.table_name not in existing_tables:
                     continue
                 cursor = await db.execute(f"SELECT COUNT(1) FROM {config.table_name}")

@@ -370,6 +370,15 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 show_default=True,
             ),
         ] = str(config.ENABLE_PURE_API_MODE),
+        scheduled_slot: Annotated[
+            str,
+            typer.Option(
+                "--scheduled_slot",
+                help="Douyin stats crawl slot: morning | afternoon | evening | manual | auto",
+                rich_help_panel="Runtime Configuration",
+                show_default=True,
+            ),
+        ] = str(getattr(config, "DY_SCHEDULED_SLOT", "manual")),
         sign_service_url: Annotated[
             str,
             typer.Option(
@@ -458,6 +467,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         config.STATIC_PROXY_URL = static_proxy_url
         config.CDP_ATTACH_ONLY = enable_cdp_attach_only
         config.ENABLE_PURE_API_MODE = _to_bool(pure_api)
+        config.DY_SCHEDULED_SLOT = (scheduled_slot or "manual").strip().lower() or "manual"
         config.SIGN_SERVICE_URL = sign_service_url
         config.QIMAI_RANK_TYPE = qimai_rank_type
         config.QIMAI_RANK_DATE = qimai_rank_date
@@ -525,6 +535,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             max_pages=config.CRAWLER_MAX_PAGES,
             cdp_attach_only=config.CDP_ATTACH_ONLY,
             pure_api=config.ENABLE_PURE_API_MODE,
+            scheduled_slot=config.DY_SCHEDULED_SLOT,
             sign_service_url=config.SIGN_SERVICE_URL,
             qimai_rank_type=config.QIMAI_RANK_TYPE,
             qimai_rank_date=config.QIMAI_RANK_DATE,

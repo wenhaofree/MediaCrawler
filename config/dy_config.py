@@ -20,6 +20,20 @@
 # Douyin platform configuration
 PUBLISH_TIME_TYPE = 0
 
+# Scheduled stats crawl slot: morning | afternoon | evening | manual | auto
+# auto = infer from Asia/Shanghai wall clock; manual = full detail for listed pages (no lifecycle filter)
+DY_SCHEDULED_SLOT = "manual"
+
+# Lifecycle windows (days) for aweme stats refresh frequency
+DY_STATS_HOT_DAYS = 7          # 0~7 days: 3x/day (morning/afternoon/evening)
+DY_STATS_MID_DAYS = 30         # 8~30 days: evening only
+DY_STATS_OLD_REFRESH_DAYS = 7  # 30+ days: at most once per 7 days (evening)
+
+# Canonical Beijing-time slots for Douyin analytics crawls
+DY_SLOT_MORNING = "09:00"
+DY_SLOT_AFTERNOON = "14:00"
+DY_SLOT_EVENING = "22:30"
+
 # Specify DY video URL list (supports multiple formats)
 # Supported formats:
 # 1. Full video URL: "https://www.douyin.com/video/7525538910311632128"

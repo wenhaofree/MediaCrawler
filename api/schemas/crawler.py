@@ -58,6 +58,7 @@ class SaveDataOptionEnum(str, Enum):
     SQLITE = "sqlite"
     MONGODB = "mongodb"
     EXCEL = "excel"
+    POSTGRES = "postgres"
 
 
 class CrawlerStartRequest(BaseModel):
@@ -77,6 +78,8 @@ class CrawlerStartRequest(BaseModel):
     headless: bool = False
     max_pages: int = Field(default=0, ge=0)
     cdp_attach_only: bool = False
+    pure_api: bool = False
+    scheduled_slot: str = Field(default="manual", description="Douyin stats slot: morning|afternoon|evening|manual|auto")
     max_notes_count: Optional[int] = Field(default=None, ge=1, le=MAX_API_LIMIT_COUNT)
     max_comments_count: Optional[int] = Field(default=None, ge=1, le=MAX_API_LIMIT_COUNT)
 

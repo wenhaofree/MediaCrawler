@@ -46,9 +46,9 @@ function resetForm() {
   taskIdInput.value = "";
   taskNameInput.value = "";
   taskPlatformInput.value = "xhs";
-  taskRunTimeInput.value = "09:00";
+  taskRunTimeInput.value = "09:00,14:00,22:30";
   taskMaxPagesInput.value = "3";
-  taskSaveOptionInput.value = "sqlite";
+  taskSaveOptionInput.value = "postgres";
   taskEnableCommentsInput.checked = false;
   taskEnableSubCommentsInput.checked = false;
   taskStatusInput.checked = true;
@@ -223,7 +223,8 @@ function renderRuns(task, runs) {
     title.innerHTML = `<strong>${run.status}</strong><div class="mono">${safeText(run.started_at)}</div>`;
     const sub = document.createElement("div");
     sub.className = "mono";
-    sub.textContent = run.trigger_type;
+    const slotLabel = run.scheduled_slot && run.scheduled_slot !== "manual" ? ` / ${run.scheduled_slot}` : "";
+    sub.textContent = `${run.trigger_type}${slotLabel}`;
     head.append(title, sub);
 
     const itemList = document.createElement("div");

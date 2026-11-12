@@ -14,7 +14,8 @@ from .crawler import PlatformEnum, SaveDataOptionEnum
 class ScheduledTaskUpsertRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     platform: PlatformEnum
-    run_time: str = Field(min_length=5, max_length=5)
+    # Single slot "09:00" or multi-slot "09:00,14:00,22:30" (Asia/Shanghai)
+    run_time: str = Field(min_length=5, max_length=64)
     max_pages: int = Field(default=3, gt=0)
     enable_comments: bool = False
     enable_sub_comments: bool = False

@@ -50,8 +50,11 @@ REDIS_DB_NUM = os.getenv("REDIS_DB_NUM", 0)  # your redis db num
 CACHE_TYPE_REDIS = "redis"
 CACHE_TYPE_MEMORY = "memory"
 
-# sqlite config
-SQLITE_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "sqlite_tables.db")
+# sqlite config (scheduler metadata; override with SQLITE_DB_PATH for Docker persistence)
+_DEFAULT_SQLITE_DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "database", "sqlite_tables.db"
+)
+SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", _DEFAULT_SQLITE_DB_PATH)
 
 sqlite_db_config = {
     "db_path": SQLITE_DB_PATH

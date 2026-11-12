@@ -85,7 +85,13 @@ async def add_douyin_creator(req: AddCreatorRequest):
 
     # 3. 将博主数据入库（保存/更新至 douyin_creator 表）
     try:
-        await douyin_store.save_creator(user_id=sec_user_id, creator=creator_res)
+        await douyin_store.save_creator(
+            user_id=sec_user_id,
+            creator=creator_res,
+            write_stats=True,
+            source_type="api_add",
+            scheduled_slot="manual",
+        )
     except Exception as e:
         utils.logger.error(f"[api.add_douyin_creator] save_creator error: {e}")
         raise HTTPException(status_code=500, detail=f"保存创作者信息到数据库失败: {e}")
@@ -98,7 +104,12 @@ async def add_douyin_creator(req: AddCreatorRequest):
             aweme_list = posts_res.get("aweme_list") or []
             aweme_list = aweme_list[:req.max_posts]
             for aweme_item in aweme_list:
-                await douyin_store.update_douyin_aweme(aweme_item)
+                await douyin_store.update_douyin_aweme(
+                    aweme_item,
+                    source_type="api_add",
+                    write_stats=True,
+                    scheduled_slot="manual",
+                )
                 saved_posts_count += 1
         except Exception as e:
             utils.logger.warning(f"[api.add_douyin_creator] 拉取作品入库异常: {e}")

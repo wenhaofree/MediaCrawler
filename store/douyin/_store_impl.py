@@ -33,11 +33,57 @@ from sqlalchemy import select
 import config
 from base.base_crawler import AbstractStore
 from database.db_session import get_session
-from database.models import DouyinAweme, DouyinAwemeComment, DouyinCreator, DyCreator
+from database.models import (
+    DouyinAweme,
+    DouyinAwemeComment,
+    DouyinAwemeStats,
+    DouyinCreator,
+    DouyinCreatorStats,
+    DyCreator,
+)
+from media_platform.douyin.lifecycle import collected_at_iso, parse_count
 from tools import utils, words
 from tools.async_file_writer import AsyncFileWriter
-from var import crawler_type_var
+from var import (
+    crawler_type_var,
+    dy_scheduled_slot_var,
+    dy_source_type_var,
+    dy_write_aweme_stats_var,
+    dy_write_creator_stats_var,
+)
 from database.mongodb_store_base import MongoDBStoreBase
+
+_AWEME_STATS_META_KEYS = {
+    "_scheduled_slot",
+    "_source_type",
+    "_write_stats",
+    "_play_count",
+    "_collected_at",
+}
+_CREATOR_STATS_META_KEYS = {
+    "_scheduled_slot",
+    "_source_type",
+    "_write_stats",
+    "_collected_at",
+}
+
+
+def _pop_meta(item: Dict, keys: set[str]) -> Dict:
+    meta = {}
+    for key in keys:
+        if key in item:
+            meta[key] = item.pop(key)
+    return meta
+
+
+def _aweme_column_payload(content_item: Dict) -> Dict:
+    allowed = {c.name for c in DouyinAweme.__table__.columns}
+    return {k: v for k, v in content_item.items() if k in allowed}
+
+
+def _creator_column_payload(creator: Dict) -> Dict:
+    allowed = {c.name for c in DyCreator.__table__.columns}
+    return {k: v for k, v in creator.items() if k in allowed}
 
 
 class DouyinCsvStoreImplement(AbstractStore):
@@ -97,19 +143,46 @@ class DouyinDbStoreImplement(AbstractStore):
         Args:
             content_item: content item dict
         """
-        aweme_id = content_item.get("aweme_id")
+        item = dict(content_item)
+        meta = _pop_meta(item, _AWEME_STATS_META_KEYS)
+        aweme_id = item.get("aweme_id")
+        payload = _aweme_column_payload(item)
         async with get_session() as session:
             result = await session.execute(select(DouyinAweme).where(DouyinAweme.aweme_id == aweme_id))
             aweme_detail = result.scalar_one_or_none()
+            persisted = False
 
             if not aweme_detail:
-                content_item["add_ts"] = utils.get_current_timestamp()
-                if content_item.get("title"):
-                    new_content = DouyinAweme(**content_item)
+                payload["add_ts"] = utils.get_current_timestamp()
+                if payload.get("title"):
+                    new_content = DouyinAweme(**payload)
                     session.add(new_content)
+                    persisted = True
             else:
-                for key, value in content_item.items():
+                for key, value in payload.items():
                     setattr(aweme_detail, key, value)
+                persisted = True
+
+            write_stats = meta.get("_write_stats")
+            if write_stats is None:
+                write_stats = dy_write_aweme_stats_var.get()
+            if write_stats and aweme_id and persisted:
+                slot = meta.get("_scheduled_slot") or dy_scheduled_slot_var.get() or "manual"
+                source_type = meta.get("_source_type") or dy_source_type_var.get() or "detail"
+                play_count = parse_count(meta.get("_play_count"))
+                session.add(
+                    DouyinAwemeStats(
+                        aweme_id=str(aweme_id),
+                        liked_count=parse_count(payload.get("liked_count")),
+                        comment_count=parse_count(payload.get("comment_count")),
+                        collected_count=parse_count(payload.get("collected_count")),
+                        share_count=parse_count(payload.get("share_count")),
+                        play_count=play_count,
+                        collected_at=meta.get("_collected_at") or collected_at_iso(),
+                        scheduled_slot=slot,
+                        source_type=source_type,
+                    )
+                )
             await session.commit()
 
     async def store_comment(self, comment_item: Dict):
@@ -138,18 +211,40 @@ class DouyinDbStoreImplement(AbstractStore):
         Args:
             creator: creator dict
         """
-        user_id = creator.get("user_id")
+        item = dict(creator)
+        meta = _pop_meta(item, _CREATOR_STATS_META_KEYS)
+        user_id = item.get("user_id")
+        payload = _creator_column_payload(item)
         async with get_session() as session:
             result = await session.execute(select(DyCreator).where(DyCreator.user_id == user_id))
             user_detail = result.scalar_one_or_none()
 
             if not user_detail:
-                creator["add_ts"] = utils.get_current_timestamp()
-                new_creator = DyCreator(**creator)
+                payload["add_ts"] = utils.get_current_timestamp()
+                new_creator = DyCreator(**payload)
                 session.add(new_creator)
             else:
-                for key, value in creator.items():
+                for key, value in payload.items():
                     setattr(user_detail, key, value)
+
+            write_stats = meta.get("_write_stats")
+            if write_stats is None:
+                write_stats = dy_write_creator_stats_var.get()
+            if write_stats and user_id:
+                slot = meta.get("_scheduled_slot") or dy_scheduled_slot_var.get() or "manual"
+                source_type = meta.get("_source_type") or dy_source_type_var.get() or "creator_crawl"
+                session.add(
+                    DouyinCreatorStats(
+                        user_id=str(user_id),
+                        follower_count=parse_count(payload.get("fans")),
+                        following_count=parse_count(payload.get("follows")),
+                        total_likes=parse_count(payload.get("interaction")),
+                        aweme_count=parse_count(payload.get("videos_count")),
+                        collected_at=meta.get("_collected_at") or collected_at_iso(),
+                        scheduled_slot=slot,
+                        source_type=source_type,
+                    )
+                )
             await session.commit()
 
 

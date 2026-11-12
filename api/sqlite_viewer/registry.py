@@ -9,7 +9,7 @@ from typing import Dict, List
 
 
 SUPPORTED_PLATFORMS = ("xhs", "dy", "bili", "wb", "zhihu")
-SUPPORTED_ENTITY_TYPES = ("content", "comment", "creator")
+SUPPORTED_ENTITY_TYPES = ("content", "comment", "creator", "creator_stats", "aweme_stats")
 
 PLATFORM_LABELS: Dict[str, str] = {
     "all": "全部平台",
@@ -24,6 +24,8 @@ ENTITY_TYPE_LABELS: Dict[str, str] = {
     "content": "内容",
     "comment": "评论",
     "creator": "创作者",
+    "creator_stats": "作者快照",
+    "aweme_stats": "作品快照",
 }
 
 
@@ -186,6 +188,51 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
                 "'videos_count', videos_count)"
             ),
             raw_preview_expr="SUBSTR(COALESCE(NULLIF(\"desc\", ''), ''), 1, 140)",
+        ),
+        "creator_stats": ViewerTableConfig(
+            platform="dy",
+            entity_type="creator_stats",
+            table_name="douyin_creator_stats",
+            pk_field="id",
+            source_id_expr="user_id",
+            title_expr="CAST(user_id AS TEXT)",
+            summary_expr="COALESCE(scheduled_slot, '') || ' / ' || COALESCE(source_type, '')",
+            author_expr="CAST(user_id AS TEXT)",
+            avatar_expr="''",
+            publish_raw_expr="collected_at",
+            sort_ts_expr="collected_at",
+            external_url_expr="CASE WHEN user_id IS NOT NULL AND user_id != '' THEN printf('https://www.douyin.com/user/%s', user_id) ELSE '' END",
+            stats_json_expr=(
+                "json_object("
+                "'follower_count', follower_count, "
+                "'following_count', following_count, "
+                "'total_likes', total_likes, "
+                "'aweme_count', aweme_count)"
+            ),
+            raw_preview_expr="COALESCE(collected_at, '')",
+        ),
+        "aweme_stats": ViewerTableConfig(
+            platform="dy",
+            entity_type="aweme_stats",
+            table_name="douyin_aweme_stats",
+            pk_field="id",
+            source_id_expr="aweme_id",
+            title_expr="CAST(aweme_id AS TEXT)",
+            summary_expr="COALESCE(scheduled_slot, '') || ' / ' || COALESCE(source_type, '')",
+            author_expr="CAST(aweme_id AS TEXT)",
+            avatar_expr="''",
+            publish_raw_expr="collected_at",
+            sort_ts_expr="collected_at",
+            external_url_expr="CASE WHEN aweme_id IS NOT NULL THEN printf('https://www.douyin.com/video/%s', aweme_id) ELSE '' END",
+            stats_json_expr=(
+                "json_object("
+                "'liked_count', liked_count, "
+                "'comment_count', comment_count, "
+                "'collected_count', collected_count, "
+                "'share_count', share_count, "
+                "'play_count', play_count)"
+            ),
+            raw_preview_expr="COALESCE(collected_at, '')",
         ),
     },
     "bili": {
@@ -402,11 +449,17 @@ def validate_entity_type(entity_type: str) -> str:
     return entity_type
 
 
+def has_entity_type(platform: str, entity_type: str) -> bool:
+    return platform in REGISTRY and entity_type in REGISTRY[platform]
+
+
 def get_config(platform: str, entity_type: str) -> ViewerTableConfig:
     validate_platform(platform)
     validate_entity_type(entity_type)
     if platform == "all":
         raise ValueError("Platform 'all' does not map to a single table")
+    if not has_entity_type(platform, entity_type):
+        raise ValueError(f"Unsupported entity type '{entity_type}' for platform '{platform}'")
     return REGISTRY[platform][entity_type]
 
 
@@ -414,5 +467,11 @@ def get_configs(platform: str, entity_type: str) -> List[ViewerTableConfig]:
     validate_platform(platform)
     validate_entity_type(entity_type)
     if platform == "all":
-        return [REGISTRY[item][entity_type] for item in SUPPORTED_PLATFORMS]
+        return [
+            REGISTRY[item][entity_type]
+            for item in SUPPORTED_PLATFORMS
+            if has_entity_type(item, entity_type)
+        ]
+    if not has_entity_type(platform, entity_type):
+        return []
     return [REGISTRY[platform][entity_type]]

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -48,12 +49,26 @@ ITEM_COUNT_CONFIG = {
 }
 TASKS_PAGE_SIZE = 20
 RUNS_PAGE_SIZE = 20
+DEFAULT_DY_SCHEDULE_TASK_NAME = "抖音增长快照(自动)"
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _scheduled_crawl_use_pure_api() -> bool:
+    return _env_flag("SCHEDULED_CRAWL_PURE_API", default=False)
 
 
 @dataclass
 class RunRequest:
     task_id: int
     trigger_type: str
+    scheduled_slot: str = "manual"
+    scheduled_hhmm: str = ""
 
 
 def _now() -> datetime:
@@ -111,13 +126,50 @@ def _parse_run_time(run_time: str) -> tuple[int, int]:
     return hour, minute
 
 
+def _parse_run_times(run_time: str) -> list[tuple[int, int]]:
+    """Parse single '09:00' or multi-slot '09:00,14:00,22:30'."""
+    parts = [part.strip() for part in str(run_time or "").split(",") if part.strip()]
+    if not parts:
+        raise ValueError("run_time must be in HH:MM format")
+    times = [_parse_run_time(part) for part in parts]
+    # Deduplicate while preserving order
+    seen: set[tuple[int, int]] = set()
+    unique: list[tuple[int, int]] = []
+    for item in times:
+        if item not in seen:
+            seen.add(item)
+            unique.append(item)
+    return unique
+
+
+def _format_hhmm(hour: int, minute: int) -> str:
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _slot_from_hhmm(hour: int, minute: int) -> str:
+    try:
+        from media_platform.douyin.lifecycle import slot_from_hhmm
+
+        return slot_from_hhmm(hour, minute)
+    except Exception:
+        if (hour, minute) == (9, 0):
+            return "morning"
+        if (hour, minute) == (14, 0):
+            return "afternoon"
+        if (hour, minute) == (22, 30):
+            return "evening"
+        return "manual"
+
+
 def _compute_next_run(run_time: str, now: datetime | None = None) -> datetime:
-    hour, minute = _parse_run_time(run_time)
     now = now or _now()
-    next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if next_run <= now:
-        next_run += timedelta(days=1)
-    return next_run
+    candidates: list[datetime] = []
+    for hour, minute in _parse_run_times(run_time):
+        next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if next_run <= now:
+            next_run += timedelta(days=1)
+        candidates.append(next_run)
+    return min(candidates)
 
 
 def _normalize_zhihu_creator(raw_value: str) -> str:
@@ -277,11 +329,13 @@ def _creator_row_to_dict(row: aiosqlite.Row) -> dict[str, Any]:
 
 
 def _run_row_to_dict(row: aiosqlite.Row) -> dict[str, Any]:
+    keys = set(row.keys())
     return {
         "id": row["id"],
         "task_id": row["task_id"],
         "status": row["status"],
         "trigger_type": row["trigger_type"],
+        "scheduled_slot": row["scheduled_slot"] if "scheduled_slot" in keys else "manual",
         "started_at": row["started_at"],
         "finished_at": row["finished_at"] or "",
         "error_message": row["error_message"] or "",
@@ -361,6 +415,7 @@ class ScheduledTaskService:
                     task_id INTEGER NOT NULL,
                     status TEXT NOT NULL,
                     trigger_type TEXT NOT NULL DEFAULT 'schedule',
+                    scheduled_slot TEXT NOT NULL DEFAULT 'manual',
                     started_at TEXT NOT NULL,
                     finished_at TEXT,
                     error_message TEXT,
@@ -393,14 +448,94 @@ class ScheduledTaskService:
                 ON scheduled_crawl_run_item(run_id);
                 """
             )
+            # Backward-compatible column for multi-slot runs
+            cursor = await db.execute("PRAGMA table_info(scheduled_crawl_run)")
+            columns = {row[1] for row in await cursor.fetchall()}
+            await cursor.close()
+            if "scheduled_slot" not in columns:
+                await db.execute(
+                    "ALTER TABLE scheduled_crawl_run ADD COLUMN scheduled_slot TEXT NOT NULL DEFAULT 'manual'"
+                )
 
     async def start(self) -> None:
         if self._started:
             return
         await self.ensure_tables()
+        await self.ensure_default_douyin_schedule()
         self._worker_task = asyncio.create_task(self._worker_loop())
         self._started = True
         await self.refresh_all_schedules()
+
+    async def ensure_default_douyin_schedule(self) -> None:
+        """
+        Seed a Douyin multi-slot analytics schedule for Docker/VPS boots.
+        Controlled by AUTO_SEED_DY_SCHEDULE + DY_SCHEDULE_CREATOR_IDS.
+        """
+        if not _env_flag("AUTO_SEED_DY_SCHEDULE", default=False):
+            return
+
+        creators_raw = os.getenv("DY_SCHEDULE_CREATOR_IDS", "").strip()
+        creators = [item.strip() for item in creators_raw.split(",") if item.strip()]
+        if not creators:
+            utils.logger.warning(
+                "[ScheduledTaskService.ensure_default_douyin_schedule] "
+                "AUTO_SEED_DY_SCHEDULE=true but DY_SCHEDULE_CREATOR_IDS is empty; skip seeding"
+            )
+            return
+
+        run_time = os.getenv("DY_SCHEDULE_RUN_TIME", "09:00,14:00,22:30").strip() or "09:00,14:00,22:30"
+        max_pages = int(os.getenv("DY_SCHEDULE_MAX_PAGES", "3") or "3")
+        save_option_raw = os.getenv("DY_SCHEDULE_SAVE_OPTION", "postgres").strip() or "postgres"
+        task_name = os.getenv("DY_SCHEDULE_TASK_NAME", DEFAULT_DY_SCHEDULE_TASK_NAME).strip() or DEFAULT_DY_SCHEDULE_TASK_NAME
+
+        try:
+            _parse_run_times(run_time)
+            save_option = SaveDataOptionEnum(save_option_raw)
+        except Exception as exc:
+            utils.logger.error(
+                "[ScheduledTaskService.ensure_default_douyin_schedule] invalid seed config: %s",
+                exc,
+            )
+            return
+
+        async with _get_connection() as db:
+            existing = await _fetchone(
+                db,
+                "SELECT id FROM scheduled_crawl_task WHERE name = ? AND platform = 'dy' LIMIT 1",
+                (task_name,),
+            )
+
+        payload = ScheduledTaskUpsertRequest(
+            name=task_name,
+            platform=PlatformEnum.DOUYIN,
+            run_time=run_time,
+            max_pages=max_pages,
+            enable_comments=False,
+            enable_sub_comments=False,
+            save_option=save_option,
+            status="active",
+            creators=creators,
+        )
+
+        if existing:
+            task_id = int(existing["id"])
+            await self.update_task(task_id, payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_douyin_schedule] updated task #%s "
+                "run_time=%s creators=%s",
+                task_id,
+                run_time,
+                len(creators),
+            )
+        else:
+            created = await self.create_task(payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_douyin_schedule] created task #%s "
+                "run_time=%s creators=%s",
+                created.get("id"),
+                run_time,
+                len(creators),
+            )
 
     async def shutdown(self) -> None:
         for trigger in self._trigger_tasks.values():
@@ -471,7 +606,15 @@ class ScheduledTaskService:
                     )
                 delay = max((next_run - _now()).total_seconds(), 0)
                 await asyncio.sleep(delay)
-                await self._queue.put(RunRequest(task_id=task_id, trigger_type="schedule"))
+                slot = _slot_from_hhmm(next_run.hour, next_run.minute)
+                await self._queue.put(
+                    RunRequest(
+                        task_id=task_id,
+                        trigger_type="schedule",
+                        scheduled_slot=slot,
+                        scheduled_hhmm=_format_hhmm(next_run.hour, next_run.minute),
+                    )
+                )
         except asyncio.CancelledError:
             return
         except Exception:
@@ -540,7 +683,7 @@ class ScheduledTaskService:
         return task
 
     async def create_task(self, payload: ScheduledTaskUpsertRequest) -> dict[str, Any]:
-        _parse_run_time(payload.run_time)
+        _parse_run_times(payload.run_time)
         platform = payload.platform.value
         if platform not in SUPPORTED_PLATFORMS:
             raise ValueError(f"Unsupported scheduled platform: {platform}")
@@ -586,7 +729,7 @@ class ScheduledTaskService:
         return await self.get_task(task_id)
 
     async def update_task(self, task_id: int, payload: ScheduledTaskUpsertRequest) -> dict[str, Any]:
-        _parse_run_time(payload.run_time)
+        _parse_run_times(payload.run_time)
         platform = payload.platform.value
         if platform not in SUPPORTED_PLATFORMS:
             raise ValueError(f"Unsupported scheduled platform: {platform}")
@@ -797,7 +940,11 @@ class ScheduledTaskService:
                 request = await self._queue.get()
                 self._current_task_id = request.task_id
                 try:
-                    await self._execute_task_run(request.task_id, request.trigger_type)
+                    await self._execute_task_run(
+                        request.task_id,
+                        request.trigger_type,
+                        scheduled_slot=request.scheduled_slot,
+                    )
                 except Exception:
                     utils.logger.exception(
                         "[ScheduledTaskService._worker_loop] failed to execute task %s",
@@ -825,17 +972,25 @@ class ScheduledTaskService:
         for request in pending_requests:
             self._queue.put_nowait(request)
 
-    async def _execute_task_run(self, task_id: int, trigger_type: str) -> None:
+    async def _execute_task_run(
+        self,
+        task_id: int,
+        trigger_type: str,
+        scheduled_slot: str = "manual",
+    ) -> None:
         task = await self.get_task(task_id)
         started_at = _now_iso()
+        slot = scheduled_slot or "manual"
+        if trigger_type == "manual":
+            slot = "manual"
         async with _get_connection() as db:
             cursor = await db.execute(
                 """
                 INSERT INTO scheduled_crawl_run (
-                    task_id, status, trigger_type, started_at, finished_at, error_message, created_at
-                ) VALUES (?, 'running', ?, ?, '', '', ?)
+                    task_id, status, trigger_type, scheduled_slot, started_at, finished_at, error_message, created_at
+                ) VALUES (?, 'running', ?, ?, ?, '', '', ?)
                 """,
-                (task_id, trigger_type, started_at, started_at),
+                (task_id, trigger_type, slot, started_at, started_at),
             )
             run_id = cursor.lastrowid
             await db.execute(
@@ -845,7 +1000,12 @@ class ScheduledTaskService:
 
         results = []
         for creator in task["creators"]:
-            result = await self._execute_creator_run(task=task, creator=creator, run_id=run_id)
+            result = await self._execute_creator_run(
+                task=task,
+                creator=creator,
+                run_id=run_id,
+                scheduled_slot=slot,
+            )
             results.append(result)
 
         statuses = [item["status"] for item in results]
@@ -896,6 +1056,7 @@ class ScheduledTaskService:
         task: dict[str, Any],
         creator: dict[str, Any],
         run_id: int,
+        scheduled_slot: str = "manual",
     ) -> dict[str, Any]:
         started_at = _now_iso()
         effective_creator_arg = creator["raw_input"]
@@ -939,6 +1100,9 @@ class ScheduledTaskService:
             await asyncio.sleep(0.2)
 
         save_option = SaveDataOptionEnum(task["save_option"])
+        # Douyin analytics slots use lifecycle filtering; other platforms keep manual.
+        slot = scheduled_slot if task["platform"] == "dy" else "manual"
+        use_pure_api = _scheduled_crawl_use_pure_api()
         request = CrawlerStartRequest(
             platform=PlatformEnum(task["platform"]),
             login_type=LoginTypeEnum.QRCODE,
@@ -949,7 +1113,9 @@ class ScheduledTaskService:
             save_option=save_option,
             headless=False,
             max_pages=task["max_pages"],
-            cdp_attach_only=True,
+            cdp_attach_only=not use_pure_api,
+            pure_api=use_pure_api,
+            scheduled_slot=slot,
         )
 
         success = await crawler_manager.start(request)

@@ -33,13 +33,23 @@ from playwright.async_api import (
 
 import config
 from base.base_crawler import AbstractCrawler
+from database.db_session import get_session
+from database.models import DouyinAweme, DouyinAwemeStats
 from media_downloader import MediaDownloader
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
+from sqlalchemy import func, select
 from store import douyin as douyin_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
 from tools.httpx_util import make_async_client
-from var import crawler_type_var, source_keyword_var
+from var import (
+    crawler_type_var,
+    dy_scheduled_slot_var,
+    dy_source_type_var,
+    dy_write_aweme_stats_var,
+    dy_write_creator_stats_var,
+    source_keyword_var,
+)
 
 from . import media as douyin_media
 from .client import DouYinClient
@@ -50,6 +60,12 @@ from .help import (
     parse_creator_info_from_url,
     get_web_id,
     generate_ms_token,
+)
+from .lifecycle import (
+    SLOT_MANUAL,
+    filter_aweme_rows_for_slot,
+    resolve_scheduled_slot,
+    should_write_creator_stats,
 )
 from .login import DouYinLogin
 
@@ -368,6 +384,13 @@ class DouYinCrawler(AbstractCrawler):
         """
         utils.logger.info("[DouYinCrawler.get_creators_and_videos] Begin get douyin creators")
         utils.logger.info("[DouYinCrawler.get_creators_and_videos] Parsing creator URLs...")
+        slot = resolve_scheduled_slot(getattr(config, "DY_SCHEDULED_SLOT", SLOT_MANUAL))
+        write_creator_stats = should_write_creator_stats(slot)
+        dy_scheduled_slot_var.set(slot)
+        dy_write_creator_stats_var.set(write_creator_stats)
+        utils.logger.info(
+            f"[DouYinCrawler.get_creators_and_videos] scheduled_slot={slot}, write_creator_stats={write_creator_stats}"
+        )
 
         for creator_url in config.DY_CREATOR_ID_LIST:
             try:
@@ -381,31 +404,127 @@ class DouYinCrawler(AbstractCrawler):
             try:
                 creator_info: Dict = await self.dy_client.get_user_info(user_id)
                 if creator_info:
-                    await douyin_store.save_creator(user_id, creator=creator_info)
+                    dy_source_type_var.set("creator_crawl")
+                    await douyin_store.save_creator(
+                        user_id,
+                        creator=creator_info,
+                        write_stats=write_creator_stats,
+                        source_type="creator_crawl",
+                        scheduled_slot=slot,
+                    )
             except DataFetchError as ex:
                 utils.logger.warning(
                     f"[DouYinCrawler.get_creators_and_videos] Could not fetch creator profile for {user_id}: {ex}. Proceeding to fetch videos..."
                 )
 
-            # Get all video information of the creator
+            # Discover posts, then refresh stats by lifecycle (non-manual slots)
             try:
-                all_video_list = await self.dy_client.get_all_user_aweme_posts(
-                    sec_user_id=user_id,
-                    callback=self.fetch_creator_video_detail,
-                )
+                if slot == SLOT_MANUAL:
+                    all_video_list = await self.dy_client.get_all_user_aweme_posts(
+                        sec_user_id=user_id,
+                        callback=self.fetch_creator_video_detail,
+                    )
+                    video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
+                else:
+                    await self.dy_client.get_all_user_aweme_posts(
+                        sec_user_id=user_id,
+                        callback=self.discover_creator_awemes,
+                    )
+                    candidate_ids = await self.select_lifecycle_aweme_ids(user_id, slot)
+                    utils.logger.info(
+                        f"[DouYinCrawler.get_creators_and_videos] lifecycle candidates for {user_id}: {len(candidate_ids)}"
+                    )
+                    await self.refresh_aweme_stats_by_ids(candidate_ids, source_type="detail")
+                    video_ids = candidate_ids
             except DataFetchError as ex:
                 utils.logger.error(
                     f"[DouYinCrawler.get_creators_and_videos] Failed to fetch creator videos for sec_user_id:{user_id}, err: {ex}"
                 )
                 continue
 
-            video_ids = [video_item.get("aweme_id") for video_item in all_video_list]
             await self.batch_get_note_comments(video_ids)
+
+    async def discover_creator_awemes(self, video_list: List[Dict]):
+        """Upsert aweme base rows from post list without detail round-trips (lifecycle mode)."""
+        dy_source_type_var.set("creator_crawl")
+        for post_item in video_list:
+            if not post_item or not post_item.get("aweme_id"):
+                continue
+            await douyin_store.update_douyin_aweme(
+                aweme_item=post_item,
+                source_type="creator_crawl",
+                write_stats=False,
+            )
+            await self.download_media(aweme_item=post_item)
+
+    async def select_lifecycle_aweme_ids(self, sec_uid: str, slot: str) -> List[str]:
+        """Pick local aweme IDs that should receive a stats refresh for this slot."""
+        rows: List[Dict[str, Any]] = []
+        save_option = getattr(config, "SAVE_DATA_OPTION", "")
+        if save_option not in {"sqlite", "db", "mysql", "postgres"}:
+            return []
+        try:
+            async with get_session() as session:
+                if session is None:
+                    return []
+                aweme_result = await session.execute(
+                    select(DouyinAweme.aweme_id, DouyinAweme.create_time).where(
+                        DouyinAweme.sec_uid == sec_uid
+                    )
+                )
+                awemes = aweme_result.all()
+                if not awemes:
+                    return []
+                stats_result = await session.execute(
+                    select(
+                        DouyinAwemeStats.aweme_id,
+                        func.max(DouyinAwemeStats.collected_at).label("last_collected_at"),
+                    ).group_by(DouyinAwemeStats.aweme_id)
+                )
+                last_map = {row.aweme_id: row.last_collected_at for row in stats_result.all()}
+                rows = [
+                    {
+                        "aweme_id": aweme.aweme_id,
+                        "create_time": aweme.create_time,
+                        "last_collected_at": last_map.get(aweme.aweme_id),
+                    }
+                    for aweme in awemes
+                ]
+        except Exception as ex:
+            utils.logger.exception(
+                f"[DouYinCrawler.select_lifecycle_aweme_ids] failed for sec_uid={sec_uid}: {ex}"
+            )
+            return []
+        return filter_aweme_rows_for_slot(rows, slot)
+
+    async def refresh_aweme_stats_by_ids(self, aweme_ids: List[str], source_type: str = "detail") -> None:
+        if not aweme_ids:
+            return
+        dy_source_type_var.set(source_type)
+        dy_write_aweme_stats_var.set(True)
+        semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        task_list = [self.get_aweme_detail(aweme_id=aweme_id, semaphore=semaphore) for aweme_id in aweme_ids]
+        note_details = await asyncio.gather(*task_list, return_exceptions=True)
+        for aweme_id, aweme_item in zip(aweme_ids, note_details):
+            if isinstance(aweme_item, Exception):
+                utils.logger.error(
+                    f"[DouYinCrawler.refresh_aweme_stats_by_ids] Failed aweme_id:{aweme_id}, err: {aweme_item}"
+                )
+                continue
+            if aweme_item is not None:
+                await douyin_store.update_douyin_aweme(
+                    aweme_item=aweme_item,
+                    source_type=source_type,
+                    write_stats=True,
+                )
+                await self.download_media(aweme_item=aweme_item)
 
     async def fetch_creator_video_detail(self, video_list: List[Dict]):
         """
-        Concurrently obtain the specified post list and save the data
+        Concurrently obtain the specified post list and save the data (manual / full mode).
         """
+        dy_source_type_var.set("detail")
+        dy_write_aweme_stats_var.set(True)
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
         task_list = [self.get_aweme_detail(post_item.get("aweme_id"), semaphore) for post_item in video_list]
 
@@ -417,7 +536,11 @@ class DouYinCrawler(AbstractCrawler):
                 )
                 continue
             if aweme_item is not None:
-                await douyin_store.update_douyin_aweme(aweme_item=aweme_item)
+                await douyin_store.update_douyin_aweme(
+                    aweme_item=aweme_item,
+                    source_type="detail",
+                    write_stats=True,
+                )
                 await self.download_media(aweme_item=aweme_item)
 
     async def create_douyin_client(self, httpx_proxy: Optional[str]) -> DouYinClient:

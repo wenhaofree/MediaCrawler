@@ -36,8 +36,14 @@ def build_crawler_command(config: CrawlerStartRequest) -> list[str]:
     if config.cookies:
         cmd.extend(["--cookies", config.cookies])
 
-    if config.cdp_attach_only:
+    if getattr(config, "pure_api", False):
+        cmd.extend(["--pure_api", "true"])
+    elif config.cdp_attach_only:
         cmd.extend(["--cdp_attach_only", "true"])
+
+    scheduled_slot = getattr(config, "scheduled_slot", None)
+    if scheduled_slot:
+        cmd.extend(["--scheduled_slot", str(scheduled_slot)])
 
     cmd.extend(["--headless", "true" if config.headless else "false"])
     return cmd

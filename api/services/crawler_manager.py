@@ -235,8 +235,14 @@ class CrawlerManager:
         if getattr(config, "max_pages", 0) and config.max_pages > 0:
             cmd.extend(["--max_pages", str(config.max_pages)])
 
-        if getattr(config, "cdp_attach_only", False):
+        if getattr(config, "pure_api", False):
+            cmd.extend(["--pure_api", "true"])
+        elif getattr(config, "cdp_attach_only", False):
             cmd.extend(["--cdp_attach_only", "true"])
+
+        scheduled_slot = getattr(config, "scheduled_slot", None)
+        if scheduled_slot:
+            cmd.extend(["--scheduled_slot", str(scheduled_slot)])
 
         if config.cookies:
             cmd.extend(["--cookies", config.cookies])

@@ -1,3 +1,34 @@
+# TODO：
+- 添加抖音账号接口✅
+- 抖音账号快照✅（`douyin_creator_stats`）
+- 抖音视频作品快照✅（`douyin_aweme_stats`）
+
+## 抖音增长快照与分层采集（已落地）
+
+核心表：
+
+- `douyin_creator` / `douyin_creator_stats`（账号涨粉，建议每天 09:00 一次）
+- `douyin_aweme` / `douyin_aweme_stats`（视频互动趋势）
+- `douyin_aweme_comment`（评论内容，第一版不做评论快照）
+
+采集时段（Asia/Shanghai）：
+
+- `09:00` morning：账号快照 + 新作发现 + 近 7 天视频 detail 快照
+- `14:00` afternoon：新作发现 + 近 7 天视频快照
+- `22:30` evening：新作发现 + 近 7 天 / 8～30 天 / 30 天以上（周采）
+
+CLI 示例：
+
+```bash
+uv run main.py --platform dy --type creator --max_pages 3 --pure_api true \
+  --save_data_option postgres --scheduled_slot morning \
+  --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"
+```
+
+Web 定时任务 `run_time` 可填：`09:00,14:00,22:30`。
+
+- 采集B站数据如何vps多部署docker？ 只是修改配置不同平台；
+
 # 🚀 项目使用指南
 
 按照以下步骤配置并运行数据爬取与展示服务。

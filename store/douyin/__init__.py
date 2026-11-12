@@ -21,11 +21,19 @@
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/1/14 18:46
 # @Desc    :
-from typing import List
+from typing import Dict, List, Optional
 
 import config
+from media_platform.douyin.lifecycle import collected_at_iso
 from media_platform.douyin.media import extract_cover_url, extract_image_urls, extract_video_urls
-from var import source_keyword_var
+from tools import utils
+from var import (
+    dy_scheduled_slot_var,
+    dy_source_type_var,
+    dy_write_aweme_stats_var,
+    dy_write_creator_stats_var,
+    source_keyword_var,
+)
 from tools.user_hash import anonymize_user_id, mask_nickname
 
 from ._store_impl import *
@@ -91,10 +99,22 @@ def _extract_music_download_url(aweme_detail: Dict) -> str:
     return music_url
 
 
-async def update_douyin_aweme(aweme_item: Dict):
+async def update_douyin_aweme(
+    aweme_item: Dict,
+    *,
+    source_type: Optional[str] = None,
+    write_stats: Optional[bool] = None,
+    scheduled_slot: Optional[str] = None,
+):
     aweme_id = aweme_item.get("aweme_id")
     user_info = aweme_item.get("author", {})
     interact_info = aweme_item.get("statistics", {})
+    play_count = interact_info.get("play_count")
+    if play_count is None:
+        play_count = interact_info.get("live_watch_count")
+    resolved_source = source_type or dy_source_type_var.get() or "detail"
+    resolved_slot = scheduled_slot or dy_scheduled_slot_var.get() or "manual"
+    resolved_write_stats = dy_write_aweme_stats_var.get() if write_stats is None else write_stats
     save_content_item = {
         "aweme_id": aweme_id,
         "aweme_type": str(aweme_item.get("aweme_type")),
@@ -121,6 +141,11 @@ async def update_douyin_aweme(aweme_item: Dict):
         "music_download_url": _extract_music_download_url(aweme_item),
         "note_download_url": ",".join(extract_image_urls(aweme_item)),
         "source_keyword": source_keyword_var.get(),
+        "_play_count": play_count,
+        "_source_type": resolved_source,
+        "_scheduled_slot": resolved_slot,
+        "_write_stats": resolved_write_stats,
+        "_collected_at": collected_at_iso(),
     }
     utils.logger.info(f"[store.douyin.update_douyin_aweme] douyin aweme id:{aweme_id}, title:{save_content_item.get('title')}")
     await DouyinStoreFactory.create_store().store_content(content_item=save_content_item)
@@ -167,7 +192,14 @@ async def update_dy_aweme_comment(aweme_id: str, comment_item: Dict):
     await DouyinStoreFactory.create_store().store_comment(comment_item=save_comment_item)
 
 
-async def save_creator(user_id: str, creator: Dict):
+async def save_creator(
+    user_id: str,
+    creator: Dict,
+    *,
+    write_stats: Optional[bool] = None,
+    source_type: Optional[str] = None,
+    scheduled_slot: Optional[str] = None,
+):
     user_info = creator.get("user", {})
     gender_map = {0: "Unknown", 1: "Male", 2: "Female"}
     avatar_uri = user_info.get("avatar_300x300", {}).get("uri")
@@ -179,6 +211,7 @@ async def save_creator(user_id: str, creator: Dict):
     elif user_info.get("avatar_thumb", {}).get("url_list"):
         avatar = user_info.get("avatar_thumb", {}).get("url_list", [""])[0]
 
+    resolved_write_stats = dy_write_creator_stats_var.get() if write_stats is None else write_stats
     local_db_item = {
         "user_id": user_id,
         "nickname": user_info.get("nickname"),
@@ -191,6 +224,10 @@ async def save_creator(user_id: str, creator: Dict):
         "interaction": str(user_info.get("total_favorited", 0)),
         "videos_count": str(user_info.get("aweme_count", 0)),
         "last_modify_ts": utils.get_current_timestamp(),
+        "_write_stats": resolved_write_stats,
+        "_source_type": source_type or dy_source_type_var.get() or "creator_crawl",
+        "_scheduled_slot": scheduled_slot or dy_scheduled_slot_var.get() or "manual",
+        "_collected_at": collected_at_iso(),
     }
     utils.logger.info(f"[store.douyin.save_creator] creator:{local_db_item}")
     await DouyinStoreFactory.create_store().store_creator(local_db_item)
