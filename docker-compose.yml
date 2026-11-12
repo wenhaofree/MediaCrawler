@@ -35,8 +35,9 @@ services:
       DY_SCHEDULE_MAX_PAGES: "${DY_SCHEDULE_MAX_PAGES:-3}"
       DY_SCHEDULE_SAVE_OPTION: "${DY_SCHEDULE_SAVE_OPTION:-postgres}"
       DY_SCHEDULE_TASK_NAME: "${DY_SCHEDULE_TASK_NAME:-抖音增长快照(自动)}"
-      # 逗号分隔 sec_uid；请在 .env 中覆盖为你的账号列表
-      DY_SCHEDULE_CREATOR_IDS: "${DY_SCHEDULE_CREATOR_IDS:-MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk,MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5,MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU}"
+      # 可选白名单；留空则自动从 Postgres douyin_creator 读取全部账号
+      DY_SCHEDULE_CREATOR_IDS: "${DY_SCHEDULE_CREATOR_IDS:-}"
+      DY_SCHEDULE_SYNC_FROM_DB: "${DY_SCHEDULE_SYNC_FROM_DB:-true}"
 
     volumes:
       # 挂载宿主机数据与日志目录（防止容器重启数据丢失；含调度 SQLite）

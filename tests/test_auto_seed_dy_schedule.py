@@ -20,6 +20,11 @@ def test_ensure_default_douyin_schedule_skips_without_creators(monkeypatch, tmp_
 
     svc = scheduled_service.ScheduledTaskService()
 
+    async def _empty_db():
+        return []
+
+    monkeypatch.setattr(svc, "_load_douyin_creator_ids_from_db", _empty_db)
+
     async def _run():
         await svc.ensure_tables()
         await svc.ensure_default_douyin_schedule()
@@ -28,6 +33,33 @@ def test_ensure_default_douyin_schedule_skips_without_creators(monkeypatch, tmp_
 
     payload = asyncio.run(_run())
     assert payload["tasks"] == []
+
+
+def test_ensure_default_douyin_schedule_loads_from_db(monkeypatch, tmp_path):
+    db_path = tmp_path / "sched.db"
+    monkeypatch.setenv("AUTO_SEED_DY_SCHEDULE", "true")
+    monkeypatch.setenv("DY_SCHEDULE_CREATOR_IDS", "")
+    monkeypatch.setenv("DY_SCHEDULE_SAVE_OPTION", "postgres")
+    monkeypatch.setattr(scheduled_service.db_config, "SQLITE_DB_PATH", str(db_path))
+
+    svc = scheduled_service.ScheduledTaskService()
+
+    async def _from_db():
+        return [
+            "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk",
+            "MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5",
+        ]
+
+    monkeypatch.setattr(svc, "_load_douyin_creator_ids_from_db", _from_db)
+
+    async def _run():
+        await svc.ensure_tables()
+        await svc.ensure_default_douyin_schedule()
+        return await svc.list_tasks()
+
+    payload = asyncio.run(_run())
+    assert len(payload["tasks"]) == 1
+    assert payload["tasks"][0]["creator_count"] == 2
 
 
 def test_ensure_default_douyin_schedule_creates_task(monkeypatch, tmp_path):

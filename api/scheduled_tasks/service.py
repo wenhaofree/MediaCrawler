@@ -466,20 +466,74 @@ class ScheduledTaskService:
         self._started = True
         await self.refresh_all_schedules()
 
+    async def _load_douyin_creator_ids_from_db(self) -> list[str]:
+        """Load distinct sec_uid / user_id values from Postgres douyin_creator."""
+        from sqlalchemy import select
+
+        from database.db_session import get_session
+        from database.models import DouyinCreator
+
+        save_option = os.getenv("DY_SCHEDULE_SAVE_OPTION", "").strip() or getattr(
+            config, "SAVE_DATA_OPTION", "postgres"
+        )
+        if save_option not in {"postgres", "db", "mysql", "sqlite"}:
+            return []
+
+        # Ensure crawl DB session uses the same backend as schedule save option.
+        previous = getattr(config, "SAVE_DATA_OPTION", None)
+        try:
+            config.SAVE_DATA_OPTION = save_option
+            async with get_session() as session:
+                if session is None:
+                    return []
+                result = await session.execute(
+                    select(DouyinCreator.user_id)
+                    .where(DouyinCreator.user_id.is_not(None))
+                    .where(DouyinCreator.user_id != "")
+                    .order_by(DouyinCreator.id.asc())
+                )
+                ids: list[str] = []
+                seen: set[str] = set()
+                for row in result.all():
+                    value = str(row[0]).strip()
+                    if value and value not in seen:
+                        seen.add(value)
+                        ids.append(value)
+                return ids
+        except Exception as exc:
+            utils.logger.exception(
+                "[ScheduledTaskService._load_douyin_creator_ids_from_db] failed: %s",
+                exc,
+            )
+            return []
+        finally:
+            if previous is not None:
+                config.SAVE_DATA_OPTION = previous
+
+    async def _resolve_douyin_schedule_creators(self) -> list[str]:
+        """
+        Prefer env whitelist when set; otherwise use all accounts in douyin_creator.
+        DY_SCHEDULE_CREATOR_IDS is optional.
+        """
+        creators_raw = os.getenv("DY_SCHEDULE_CREATOR_IDS", "").strip()
+        creators = [item.strip() for item in creators_raw.split(",") if item.strip()]
+        if creators:
+            return creators
+        return await self._load_douyin_creator_ids_from_db()
+
     async def ensure_default_douyin_schedule(self) -> None:
         """
         Seed a Douyin multi-slot analytics schedule for Docker/VPS boots.
-        Controlled by AUTO_SEED_DY_SCHEDULE + DY_SCHEDULE_CREATOR_IDS.
+        Creator list: DY_SCHEDULE_CREATOR_IDS (optional) or douyin_creator table.
         """
         if not _env_flag("AUTO_SEED_DY_SCHEDULE", default=False):
             return
 
-        creators_raw = os.getenv("DY_SCHEDULE_CREATOR_IDS", "").strip()
-        creators = [item.strip() for item in creators_raw.split(",") if item.strip()]
+        creators = await self._resolve_douyin_schedule_creators()
         if not creators:
             utils.logger.warning(
                 "[ScheduledTaskService.ensure_default_douyin_schedule] "
-                "AUTO_SEED_DY_SCHEDULE=true but DY_SCHEDULE_CREATOR_IDS is empty; skip seeding"
+                "no creators found in DY_SCHEDULE_CREATOR_IDS or douyin_creator; skip seeding"
             )
             return
 
@@ -979,6 +1033,37 @@ class ScheduledTaskService:
         scheduled_slot: str = "manual",
     ) -> None:
         task = await self.get_task(task_id)
+        # Auto Douyin task: refresh creator list from douyin_creator before each run
+        # unless DY_SCHEDULE_CREATOR_IDS whitelist is explicitly set.
+        task_name = os.getenv("DY_SCHEDULE_TASK_NAME", DEFAULT_DY_SCHEDULE_TASK_NAME).strip() or DEFAULT_DY_SCHEDULE_TASK_NAME
+        if (
+            task.get("platform") == "dy"
+            and task.get("name") == task_name
+            and _env_flag("DY_SCHEDULE_SYNC_FROM_DB", default=True)
+            and not os.getenv("DY_SCHEDULE_CREATOR_IDS", "").strip()
+        ):
+            creators = await self._load_douyin_creator_ids_from_db()
+            if creators:
+                await self.update_task(
+                    task_id,
+                    ScheduledTaskUpsertRequest(
+                        name=task["name"],
+                        platform=PlatformEnum.DOUYIN,
+                        run_time=task["run_time"],
+                        max_pages=task["max_pages"],
+                        enable_comments=task["enable_comments"],
+                        enable_sub_comments=task["enable_sub_comments"],
+                        save_option=SaveDataOptionEnum(task["save_option"]),
+                        status=task["status"],
+                        creators=creators,
+                    ),
+                )
+                task = await self.get_task(task_id)
+                utils.logger.info(
+                    "[ScheduledTaskService._execute_task_run] synced %s creators from douyin_creator",
+                    len(creators),
+                )
+
         started_at = _now_iso()
         slot = scheduled_slot or "manual"
         if trigger_type == "manual":
