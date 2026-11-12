@@ -104,6 +104,16 @@ async def add_douyin_creator(req: AddCreatorRequest):
             utils.logger.warning(f"[api.add_douyin_creator] 拉取作品入库异常: {e}")
 
     gender_map = {0: "未知", 1: "男", 2: "女"}
+    # 头像提取逻辑与 store.douyin.save_creator 保持一致
+    avatar_uri = (user_data.get("avatar_300x300") or {}).get("uri")
+    avatar = ""
+    if avatar_uri:
+        avatar = f"https://p3-pc.douyinpic.com/img/{avatar_uri}~c5_300x300.jpeg?from=2956013662"
+    elif (user_data.get("avatar_larger") or {}).get("url_list"):
+        avatar = user_data.get("avatar_larger", {}).get("url_list", [""])[0]
+    elif (user_data.get("avatar_thumb") or {}).get("url_list"):
+        avatar = user_data.get("avatar_thumb", {}).get("url_list", [""])[0]
+
     return {
         "code": 200,
         "message": "抖音账号信息解析并入库成功",
@@ -111,6 +121,7 @@ async def add_douyin_creator(req: AddCreatorRequest):
             "user_id": sec_user_id,
             "nickname": user_data.get("nickname"),
             "unique_id": user_data.get("unique_id") or user_data.get("short_id"),
+            "avatar": avatar,
             "gender": gender_map.get(user_data.get("gender"), "未知"),
             "signature": user_data.get("signature"),
             "ip_location": user_data.get("ip_location"),
