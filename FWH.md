@@ -234,6 +234,29 @@ uv run main.py --platform dy --type creator --max_pages 3 --pure_api true \
 
 Web 定时任务 `run_time` 可填：`09:00,14:00,22:30`。
 
+## B站增长快照与定时采集
+
+`mediacrawler-bili` 启动时会自动创建 `B站增长快照(自动)` 任务；默认按 Asia/Shanghai 时区在 `09:00,14:00,22:30` 采集，并把 UP 主与视频快照写入 PostgreSQL。频率和单次作品页数可在 `.env` 调整：
+
+```dotenv
+AUTO_SEED_BILI_SCHEDULE=true
+BILI_SCHEDULE_RUN_TIME=09:00,14:00,22:30
+BILI_SCHEDULE_MAX_PAGES=3
+BILI_SCHEDULE_SAVE_OPTION=postgres
+# 留空自动读取 bilibili_up_info；配置后仅采集此白名单
+BILI_SCHEDULE_CREATOR_IDS=
+BILI_SCHEDULE_SYNC_FROM_DB=true
+```
+
+作者来源优先使用 `BILI_SCHEDULE_CREATOR_IDS`；留空时会读取 `bilibili_up_info`，每次执行前再次同步，新增的 UP 主无需手工改定时任务。部署或更新后执行：
+
+```bash
+docker compose up -d --build mediacrawler-bili
+docker compose logs -f mediacrawler-bili
+```
+
+需降低采集频率时，例如每天两次，将 `BILI_SCHEDULE_RUN_TIME` 改为 `09:00,21:00` 后重启 `mediacrawler-bili`。B站任务全程采用纯 API；`BILI_COOKIES` 仍只应放在本地 `.env`，不要提交到仓库。
+
 - 采集B站数据如何vps多部署docker？ 只是修改配置不同平台；
 
 # 🚀 项目使用指南

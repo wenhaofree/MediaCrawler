@@ -42,6 +42,7 @@ services:
       # 可选白名单；留空则自动从 Postgres douyin_creator 读取全部账号
       DY_SCHEDULE_CREATOR_IDS: "${DY_SCHEDULE_CREATOR_IDS:-}"
       DY_SCHEDULE_SYNC_FROM_DB: "${DY_SCHEDULE_SYNC_FROM_DB:-true}"
+      AUTO_SEED_BILI_SCHEDULE: "false"
 
     volumes:
       # 挂载宿主机数据与日志目录（防止容器重启数据丢失；含调度 SQLite）
@@ -81,6 +82,15 @@ services:
       BILI_SPECIFIED_IDS: "${BILI_SPECIFIED_IDS:-}"
       ENABLE_PURE_API_MODE: "true"
       AUTO_SEED_DY_SCHEDULE: "false"
+      AUTO_SEED_BILI_SCHEDULE: "${AUTO_SEED_BILI_SCHEDULE:-true}"
+      SCHEDULED_CRAWL_PURE_API: "${SCHEDULED_CRAWL_PURE_API:-true}"
+      BILI_SCHEDULE_RUN_TIME: "${BILI_SCHEDULE_RUN_TIME:-09:00,14:00,22:30}"
+      BILI_SCHEDULE_MAX_PAGES: "${BILI_SCHEDULE_MAX_PAGES:-3}"
+      BILI_SCHEDULE_SAVE_OPTION: "${BILI_SCHEDULE_SAVE_OPTION:-postgres}"
+      BILI_SCHEDULE_TASK_NAME: "${BILI_SCHEDULE_TASK_NAME:-B站增长快照(自动)}"
+      # 可选白名单；留空则自动从 Postgres bilibili_up_info 读取全部 UP 主
+      BILI_SCHEDULE_CREATOR_IDS: "${BILI_SCHEDULE_CREATOR_IDS:-}"
+      BILI_SCHEDULE_SYNC_FROM_DB: "${BILI_SCHEDULE_SYNC_FROM_DB:-true}"
     volumes:
       - ./data/bili:/app/data
       - ./.env:/app/.env:ro
@@ -120,6 +130,7 @@ services:
       XHS_REQUEST_INTERVAL_MIN_SEC: "8"
       XHS_REQUEST_INTERVAL_MAX_SEC: "15"
       AUTO_SEED_DY_SCHEDULE: "false"
+      AUTO_SEED_BILI_SCHEDULE: "false"
     volumes:
       - ./data/xhs:/app/data
       - ./.env:/app/.env:ro

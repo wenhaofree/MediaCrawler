@@ -47,6 +47,7 @@ ITEM_COUNT_CONFIG = {
 TASKS_PAGE_SIZE = 20
 RUNS_PAGE_SIZE = 20
 DEFAULT_DY_SCHEDULE_TASK_NAME = "抖音增长快照(自动)"
+DEFAULT_BILI_SCHEDULE_TASK_NAME = "B站增长快照(自动)"
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -459,6 +460,7 @@ class ScheduledTaskService:
             return
         await self.ensure_tables()
         await self.ensure_default_douyin_schedule()
+        await self.ensure_default_bilibili_schedule()
         self._worker_task = asyncio.create_task(self._worker_loop())
         self._started = True
         await self.refresh_all_schedules()
@@ -583,6 +585,114 @@ class ScheduledTaskService:
             utils.logger.info(
                 "[ScheduledTaskService.ensure_default_douyin_schedule] created task #%s "
                 "run_time=%s creators=%s",
+                created.get("id"),
+                run_time,
+                len(creators),
+            )
+
+    async def _load_bilibili_creator_ids_from_db(self) -> list[str]:
+        """Load monitored UP IDs from Postgres bilibili_up_info."""
+        from sqlalchemy import select
+
+        from database.db_session import get_session
+        from database.models import BilibiliUpInfo
+
+        save_option = os.getenv("BILI_SCHEDULE_SAVE_OPTION", "").strip() or getattr(
+            config, "SAVE_DATA_OPTION", "postgres"
+        )
+        if save_option not in {"postgres", "db", "mysql", "sqlite"}:
+            return []
+
+        previous = getattr(config, "SAVE_DATA_OPTION", None)
+        try:
+            config.SAVE_DATA_OPTION = save_option
+            async with get_session() as session:
+                if session is None:
+                    return []
+                result = await session.execute(
+                    select(BilibiliUpInfo.user_id)
+                    .where(BilibiliUpInfo.user_id.is_not(None))
+                    .order_by(BilibiliUpInfo.id.asc())
+                )
+                return list(dict.fromkeys(str(row[0]).strip() for row in result.all() if row[0] is not None))
+        except Exception as exc:
+            utils.logger.exception(
+                "[ScheduledTaskService._load_bilibili_creator_ids_from_db] failed: %s",
+                exc,
+            )
+            return []
+        finally:
+            if previous is not None:
+                config.SAVE_DATA_OPTION = previous
+
+    async def _resolve_bilibili_schedule_creators(self) -> list[str]:
+        """Prefer BILI_SCHEDULE_CREATOR_IDS; otherwise reuse stored monitored UPs."""
+        creators = [
+            item.strip()
+            for item in os.getenv("BILI_SCHEDULE_CREATOR_IDS", "").split(",")
+            if item.strip()
+        ]
+        return creators or await self._load_bilibili_creator_ids_from_db()
+
+    async def ensure_default_bilibili_schedule(self) -> None:
+        """Seed the Bilibili multi-slot snapshot schedule for the Bilibili container."""
+        if not _env_flag("AUTO_SEED_BILI_SCHEDULE", default=False):
+            return
+
+        creators = await self._resolve_bilibili_schedule_creators()
+        if not creators:
+            utils.logger.warning(
+                "[ScheduledTaskService.ensure_default_bilibili_schedule] "
+                "no creators found in BILI_SCHEDULE_CREATOR_IDS or bilibili_up_info; skip seeding"
+            )
+            return
+
+        run_time = os.getenv("BILI_SCHEDULE_RUN_TIME", "09:00,14:00,22:30").strip() or "09:00,14:00,22:30"
+        max_pages = int(os.getenv("BILI_SCHEDULE_MAX_PAGES", "3") or "3")
+        save_option_raw = os.getenv("BILI_SCHEDULE_SAVE_OPTION", "postgres").strip() or "postgres"
+        task_name = os.getenv("BILI_SCHEDULE_TASK_NAME", DEFAULT_BILI_SCHEDULE_TASK_NAME).strip() or DEFAULT_BILI_SCHEDULE_TASK_NAME
+
+        try:
+            _parse_run_times(run_time)
+            save_option = SaveDataOptionEnum(save_option_raw)
+        except Exception as exc:
+            utils.logger.error(
+                "[ScheduledTaskService.ensure_default_bilibili_schedule] invalid seed config: %s",
+                exc,
+            )
+            return
+
+        async with _get_connection() as db:
+            existing = await _fetchone(
+                db,
+                "SELECT id FROM scheduled_crawl_task WHERE name = ? AND platform = 'bili' LIMIT 1",
+                (task_name,),
+            )
+
+        payload = ScheduledTaskUpsertRequest(
+            name=task_name,
+            platform=PlatformEnum.BILIBILI,
+            run_time=run_time,
+            max_pages=max_pages,
+            enable_comments=False,
+            enable_sub_comments=False,
+            save_option=save_option,
+            status="active",
+            creators=creators,
+        )
+        if existing:
+            task_id = int(existing["id"])
+            await self.update_task(task_id, payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_bilibili_schedule] updated task #%s run_time=%s creators=%s",
+                task_id,
+                run_time,
+                len(creators),
+            )
+        else:
+            created = await self.create_task(payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_bilibili_schedule] created task #%s run_time=%s creators=%s",
                 created.get("id"),
                 run_time,
                 len(creators),
@@ -1030,8 +1140,7 @@ class ScheduledTaskService:
         scheduled_slot: str = "manual",
     ) -> None:
         task = await self.get_task(task_id)
-        # Auto Douyin task: refresh creator list from douyin_creator before each run
-        # unless DY_SCHEDULE_CREATOR_IDS whitelist is explicitly set.
+        # Auto platform tasks refresh their creator list from the primary table when no whitelist is set.
         task_name = os.getenv("DY_SCHEDULE_TASK_NAME", DEFAULT_DY_SCHEDULE_TASK_NAME).strip() or DEFAULT_DY_SCHEDULE_TASK_NAME
         if (
             task.get("platform") == "dy"
@@ -1058,6 +1167,35 @@ class ScheduledTaskService:
                 task = await self.get_task(task_id)
                 utils.logger.info(
                     "[ScheduledTaskService._execute_task_run] synced %s creators from douyin_creator",
+                    len(creators),
+                )
+
+        bili_task_name = os.getenv("BILI_SCHEDULE_TASK_NAME", DEFAULT_BILI_SCHEDULE_TASK_NAME).strip() or DEFAULT_BILI_SCHEDULE_TASK_NAME
+        if (
+            task.get("platform") == "bili"
+            and task.get("name") == bili_task_name
+            and _env_flag("BILI_SCHEDULE_SYNC_FROM_DB", default=True)
+            and not os.getenv("BILI_SCHEDULE_CREATOR_IDS", "").strip()
+        ):
+            creators = await self._load_bilibili_creator_ids_from_db()
+            if creators:
+                await self.update_task(
+                    task_id,
+                    ScheduledTaskUpsertRequest(
+                        name=task["name"],
+                        platform=PlatformEnum.BILIBILI,
+                        run_time=task["run_time"],
+                        max_pages=task["max_pages"],
+                        enable_comments=task["enable_comments"],
+                        enable_sub_comments=task["enable_sub_comments"],
+                        save_option=SaveDataOptionEnum(task["save_option"]),
+                        status=task["status"],
+                        creators=creators,
+                    ),
+                )
+                task = await self.get_task(task_id)
+                utils.logger.info(
+                    "[ScheduledTaskService._execute_task_run] synced %s creators from bilibili_up_info",
                     len(creators),
                 )
 
@@ -1154,8 +1292,8 @@ class ScheduledTaskService:
             await asyncio.sleep(0.2)
 
         save_option = SaveDataOptionEnum(task["save_option"])
-        # Douyin analytics slots use lifecycle filtering; other platforms keep manual.
-        slot = scheduled_slot if task["platform"] == "dy" else "manual"
+        # Bilibili snapshots share the same schedule slots as Douyin trend snapshots.
+        slot = scheduled_slot if task["platform"] in {"dy", "bili"} else "manual"
         use_pure_api = task["platform"] == "xhs" or _scheduled_crawl_use_pure_api()
         request = CrawlerStartRequest(
             platform=PlatformEnum(task["platform"]),

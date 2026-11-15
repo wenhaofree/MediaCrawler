@@ -213,6 +213,70 @@ async def test_xhs_scheduled_task_uses_pure_api_without_cdp(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_bilibili_default_schedule_uses_configured_frequency(tmp_path, monkeypatch):
+    service = await _build_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("AUTO_SEED_BILI_SCHEDULE", "true")
+    monkeypatch.setenv("BILI_SCHEDULE_CREATOR_IDS", "20813884, 625267185")
+    monkeypatch.setenv("BILI_SCHEDULE_RUN_TIME", "09:00,21:00")
+    monkeypatch.setenv("BILI_SCHEDULE_SAVE_OPTION", "sqlite")
+
+    await service.ensure_default_bilibili_schedule()
+    task = (await service.list_tasks())["tasks"][0]
+
+    assert task["name"] == "B站增长快照(自动)"
+    assert task["platform"] == "bili"
+    assert task["run_time"] == "09:00,21:00"
+    assert task["status"] == "active"
+    assert [creator["normalized_creator_id"] for creator in task["creators"]] == ["20813884", "625267185"]
+
+    await service.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_bilibili_scheduled_task_uses_pure_api_and_snapshot_slot(tmp_path, monkeypatch):
+    service = await _build_service(tmp_path, monkeypatch)
+    task = await service.create_task(
+        ScheduledTaskUpsertRequest(
+            name="B站增长快照(自动)",
+            platform=PlatformEnum.BILIBILI,
+            run_time="09:00",
+            max_pages=1,
+            save_option=SaveDataOptionEnum.SQLITE,
+            status="paused",
+            creators=["https://space.bilibili.com/20813884"],
+        )
+    )
+    requests = []
+
+    async def fake_start(request):
+        requests.append(request)
+        return True
+
+    async def fake_count_creator_items(_platform, _creator):
+        return 0
+
+    async def fake_wait():
+        return 0
+
+    monkeypatch.setenv("SCHEDULED_CRAWL_PURE_API", "true")
+    monkeypatch.setenv("BILI_SCHEDULE_SYNC_FROM_DB", "false")
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.start", fake_start)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.wait", fake_wait)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.process", None)
+    monkeypatch.setattr(service, "_count_creator_items", fake_count_creator_items)
+
+    await service._execute_task_run(task["id"], "schedule", scheduled_slot="morning")
+
+    assert len(requests) == 1
+    assert requests[0].pure_api is True
+    assert requests[0].cdp_attach_only is False
+    assert requests[0].scheduled_slot == "morning"
+    assert requests[0].creator_ids == "20813884"
+
+    await service.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_delete_task_removes_queued_run_requests(tmp_path, monkeypatch):
     service = await _build_service(tmp_path, monkeypatch)
     payload = ScheduledTaskUpsertRequest(
