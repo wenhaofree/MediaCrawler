@@ -20,7 +20,7 @@
 
 from asyncio.tasks import Task
 from contextvars import ContextVar
-from typing import List
+from typing import List, Optional, Set
 
 import aiomysql
 
@@ -34,3 +34,23 @@ dy_scheduled_slot_var: ContextVar[str] = ContextVar("dy_scheduled_slot", default
 dy_source_type_var: ContextVar[str] = ContextVar("dy_source_type", default="")
 dy_write_creator_stats_var: ContextVar[bool] = ContextVar("dy_write_creator_stats", default=True)
 dy_write_aweme_stats_var: ContextVar[bool] = ContextVar("dy_write_aweme_stats", default=True)
+
+# Bilibili records one UP snapshot per crawler run even when multiple videos share the same author.
+bili_creator_stats_seen_var: ContextVar[Optional[Set[str]]] = ContextVar(
+    "bili_creator_stats_seen", default=None
+)
+
+
+def reset_bili_creator_stats_seen() -> None:
+    bili_creator_stats_seen_var.set(set())
+
+
+def should_write_bili_creator_stats(user_id: str) -> bool:
+    seen = bili_creator_stats_seen_var.get()
+    if seen is None:
+        seen = set()
+        bili_creator_stats_seen_var.set(seen)
+    if user_id in seen:
+        return False
+    seen.add(user_id)
+    return True

@@ -282,7 +282,13 @@ def test_sqlite_viewer_options_returns_supported_platforms(tmp_path, monkeypatch
     payload = response.json()
 
     assert [item["value"] for item in payload["platforms"]] == ["all", "xhs", "dy", "bili", "wb", "zhihu"]
-    assert [item["value"] for item in payload["entity_types"]] == ["content", "comment", "creator"]
+    assert [item["value"] for item in payload["entity_types"]] == [
+        "content",
+        "comment",
+        "creator",
+        "creator_stats",
+        "aweme_stats",
+    ]
     assert payload["counts"]["dy"]["content"] == 3
     assert payload["counts"]["dy"]["creator"] == 1
     assert payload["counts"]["xhs"]["content"] == 0

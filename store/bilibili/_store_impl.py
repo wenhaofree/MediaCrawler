@@ -36,10 +36,18 @@ from sqlalchemy.orm import sessionmaker
 import config
 from base.base_crawler import AbstractStore
 from database.db_session import get_session
-from database.models import BilibiliUpInfo, BilibiliVideoComment, BilibiliVideo, BilibiliUpDynamic
+from database.models import (
+    BilibiliUpInfo,
+    BilibiliUpStats,
+    BilibiliVideo,
+    BilibiliVideoComment,
+    BilibiliVideoStats,
+    BilibiliUpDynamic,
+)
+from media_platform.douyin.lifecycle import collected_at_iso, parse_count, resolve_scheduled_slot
 from tools.async_file_writer import AsyncFileWriter
 from tools import utils, words
-from var import crawler_type_var
+from var import crawler_type_var, should_write_bili_creator_stats
 from database.mongodb_store_base import MongoDBStoreBase
 
 
@@ -145,6 +153,21 @@ class BiliDbStoreImplement(AbstractStore):
                 content_item["last_modify_ts"] = utils.get_current_timestamp()
                 for key, value in content_item.items():
                     setattr(video_detail, key, value)
+            session.add(
+                BilibiliVideoStats(
+                    video_id=str(video_id),
+                    liked_count=parse_count(content_item.get("liked_count")),
+                    play_count=parse_count(content_item.get("video_play_count")),
+                    favorite_count=parse_count(content_item.get("video_favorite_count")),
+                    share_count=parse_count(content_item.get("video_share_count")),
+                    coin_count=parse_count(content_item.get("video_coin_count")),
+                    danmaku_count=parse_count(content_item.get("video_danmaku")),
+                    comment_count=parse_count(content_item.get("video_comment")),
+                    collected_at=collected_at_iso(),
+                    scheduled_slot=resolve_scheduled_slot(),
+                    source_type=crawler_type_var.get() or "detail",
+                )
+            )
             await session.commit()
 
     async def store_comment(self, comment_item: Dict):
@@ -199,6 +222,17 @@ class BiliDbStoreImplement(AbstractStore):
                 creator["last_modify_ts"] = utils.get_current_timestamp()
                 for key, value in creator.items():
                     setattr(creator_detail, key, value)
+            if should_write_bili_creator_stats(str(creator["user_id"])):
+                session.add(
+                    BilibiliUpStats(
+                        user_id=creator["user_id"],
+                        follower_count=creator.get("total_fans"),
+                        total_likes=creator.get("total_liked"),
+                        collected_at=collected_at_iso(),
+                        scheduled_slot=resolve_scheduled_slot(),
+                        source_type=crawler_type_var.get() or "creator",
+                    )
+                )
             await session.commit()
 
     async def store_contact(self, contact_item: Dict):

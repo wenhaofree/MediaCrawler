@@ -301,6 +301,47 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
             ),
             raw_preview_expr="SUBSTR(COALESCE(NULLIF(sign, ''), ''), 1, 140)",
         ),
+        "creator_stats": ViewerTableConfig(
+            platform="bili",
+            entity_type="creator_stats",
+            table_name="bilibili_up_stats",
+            pk_field="id",
+            source_id_expr="user_id",
+            title_expr="CAST(user_id AS TEXT)",
+            summary_expr="COALESCE(scheduled_slot, '') || ' / ' || COALESCE(source_type, '')",
+            author_expr="CAST(user_id AS TEXT)",
+            avatar_expr="''",
+            publish_raw_expr="collected_at",
+            sort_ts_expr="collected_at",
+            external_url_expr="CASE WHEN user_id IS NOT NULL THEN printf('https://space.bilibili.com/%s', user_id) ELSE '' END",
+            stats_json_expr="json_object('follower_count', follower_count, 'total_likes', total_likes)",
+            raw_preview_expr="COALESCE(collected_at, '')",
+        ),
+        "aweme_stats": ViewerTableConfig(
+            platform="bili",
+            entity_type="aweme_stats",
+            table_name="bilibili_video_stats",
+            pk_field="id",
+            source_id_expr="video_id",
+            title_expr="CAST(video_id AS TEXT)",
+            summary_expr="COALESCE(scheduled_slot, '') || ' / ' || COALESCE(source_type, '')",
+            author_expr="CAST(video_id AS TEXT)",
+            avatar_expr="''",
+            publish_raw_expr="collected_at",
+            sort_ts_expr="collected_at",
+            external_url_expr="CASE WHEN video_id IS NOT NULL THEN printf('https://www.bilibili.com/video/av%s', video_id) ELSE '' END",
+            stats_json_expr=(
+                "json_object("
+                "'liked_count', liked_count, "
+                "'play_count', play_count, "
+                "'favorite_count', favorite_count, "
+                "'share_count', share_count, "
+                "'coin_count', coin_count, "
+                "'danmaku_count', danmaku_count, "
+                "'comment_count', comment_count)"
+            ),
+            raw_preview_expr="COALESCE(collected_at, '')",
+        ),
     },
     "wb": {
         "content": ViewerTableConfig(

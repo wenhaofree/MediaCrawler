@@ -47,7 +47,7 @@ from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import bilibili as bilibili_store
 from tools import utils
 from tools.cdp_browser import CDPBrowserManager
-from var import crawler_type_var, source_keyword_var
+from var import crawler_type_var, reset_bili_creator_stats_seen, source_keyword_var
 
 from . import media as bili_media
 from .client import BilibiliClient
@@ -74,6 +74,7 @@ class BilibiliCrawler(AbstractCrawler):
         self._media_downloader: Optional[MediaDownloader] = None
 
     async def start(self):
+        reset_bili_creator_stats_seen()
         playwright_proxy_format, httpx_proxy_format = None, None
         if config.ENABLE_IP_PROXY:
             self.ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)

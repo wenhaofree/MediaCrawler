@@ -6,9 +6,10 @@ from sqlalchemy.pool import StaticPool
 
 import config
 from database import db_session
-from database.models import Base, BilibiliUpInfo
+from database.models import Base, BilibiliUpInfo, BilibiliUpStats, BilibiliVideoStats
 import store.bilibili as bili_store
 from store.bilibili._store_impl import BiliDbStoreImplement
+from var import reset_bili_creator_stats_seen
 
 
 def test_update_up_info_maps_video_card_to_creator():
@@ -65,18 +66,48 @@ def test_bili_creator_store_upserts_by_uid(monkeypatch):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+        reset_bili_creator_stats_seen()
         store = BiliDbStoreImplement()
         await store.store_creator({"user_id": "123", "nickname": "old", "total_fans": "1"})
         await store.store_creator({"user_id": 123, "nickname": "new", "total_fans": 2})
 
+        await store.store_content(
+            {
+                "video_id": "BV1test",
+                "video_url": "https://www.bilibili.com/video/av1",
+                "title": "old video",
+                "liked_count": "10",
+                "create_time": 1,
+                "video_play_count": "100",
+                "video_comment": "2",
+            }
+        )
+        await store.store_content(
+            {
+                "video_id": "BV1test",
+                "video_url": "https://www.bilibili.com/video/av1",
+                "title": "new video",
+                "liked_count": "20",
+                "create_time": 1,
+                "video_play_count": "200",
+                "video_comment": "3",
+            }
+        )
+
         async with db_session.get_session() as session:
             count = await session.scalar(select(func.count()).select_from(BilibiliUpInfo))
             row = (await session.execute(select(BilibiliUpInfo))).scalars().one()
+            up_stats = (await session.execute(select(BilibiliUpStats))).scalars().all()
+            video_stats = (await session.execute(select(BilibiliVideoStats))).scalars().all()
         await engine.dispose()
-        return count, row
+        return count, row, up_stats, video_stats
 
-    count, row = asyncio.run(run())
+    count, row, up_stats, video_stats = asyncio.run(run())
     assert count == 1
     assert row.user_id == 123
     assert row.nickname == "new"
     assert row.total_fans == 2
+    assert len(up_stats) == 1
+    assert up_stats[0].follower_count == 1
+    assert len(video_stats) == 2
+    assert [snapshot.play_count for snapshot in video_stats] == [100, 200]

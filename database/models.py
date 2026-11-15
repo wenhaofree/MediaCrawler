@@ -91,6 +91,42 @@ class BilibiliUpInfo(Base):
     user_rank = Column(Integer, comment='用户等级')
     is_official = Column(Integer, comment='是否官方认证')
 
+
+class BilibiliUpStats(Base):
+    """Append-only public UP profile snapshots for growth trends."""
+    __tablename__ = 'bilibili_up_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    user_id = Column(BigInteger, nullable=False, index=True, comment='UP主ID')
+    follower_count = Column(BigInteger, comment='粉丝数')
+    total_likes = Column(BigInteger, comment='总获赞数')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段')
+    source_type = Column(String(32), default='creator', comment='采集类型')
+    __table_args__ = (
+        Index('idx_bili_up_stats_user_collected', 'user_id', 'collected_at'),
+    )
+
+
+class BilibiliVideoStats(Base):
+    """Append-only Bilibili video engagement snapshots for trend charts."""
+    __tablename__ = 'bilibili_video_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    video_id = Column(String(64), nullable=False, index=True, comment='视频ID')
+    liked_count = Column(BigInteger, comment='点赞数')
+    play_count = Column(BigInteger, comment='播放数')
+    favorite_count = Column(BigInteger, comment='收藏数')
+    share_count = Column(BigInteger, comment='分享数')
+    coin_count = Column(BigInteger, comment='投币数')
+    danmaku_count = Column(BigInteger, comment='弹幕数')
+    comment_count = Column(BigInteger, comment='评论数')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段')
+    source_type = Column(String(32), default='detail', comment='采集类型')
+    __table_args__ = (
+        Index('idx_bili_video_stats_video_collected', 'video_id', 'collected_at'),
+    )
+
+
 class BilibiliContactInfo(Base):
     __tablename__ = 'bilibili_contact_info'
     id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')

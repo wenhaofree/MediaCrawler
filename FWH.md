@@ -127,6 +127,21 @@ docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
    FROM bilibili_video_comment
    ORDER BY last_modify_ts DESC
    LIMIT 10;"
+
+# 趋势图数据：重复采集后应看到同一 UID / 视频 ID 的多条时间序列快照
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT user_id, follower_count, total_likes, collected_at
+   FROM bilibili_up_stats
+   ORDER BY collected_at DESC
+   LIMIT 10;"
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT video_id, play_count, liked_count, comment_count, collected_at
+   FROM bilibili_video_stats
+   ORDER BY collected_at DESC
+   LIMIT 10;"
 ```
 
 通过单账号验证后，使用 `.env` 中已配置的 B站账号列表跑批量采集：
