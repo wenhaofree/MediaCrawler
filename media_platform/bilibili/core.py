@@ -58,15 +58,17 @@ from .login import BilibiliLogin
 
 
 class BilibiliCrawler(AbstractCrawler):
-    context_page: Page
+    context_page: Optional[Page]
     bili_client: BilibiliClient
-    browser_context: BrowserContext
+    browser_context: Optional[BrowserContext]
     cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self):
         self.index_url = "https://www.bilibili.com"
         self.cookie_urls = [self.index_url]
         self.user_agent = utils.get_user_agent()
+        self.context_page = None
+        self.browser_context = None
         self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool for automatic proxy refresh
         self._media_downloader: Optional[MediaDownloader] = None
@@ -77,6 +79,10 @@ class BilibiliCrawler(AbstractCrawler):
             self.ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
             ip_proxy_info: IpInfoModel = await self.ip_proxy_pool.get_proxy()
             playwright_proxy_format, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
+
+        if config.ENABLE_PURE_API_MODE:
+            await self.start_pure_api(httpx_proxy_format)
+            return
 
         async with async_playwright() as playwright:
             # Choose launch mode based on configuration
@@ -149,6 +155,48 @@ class BilibiliCrawler(AbstractCrawler):
             else:
                 pass
             utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
+
+    async def start_pure_api(self, httpx_proxy: Optional[str]) -> None:
+        """Run Bilibili's HTTP API path without starting Playwright."""
+        cookie_str = config.COOKIES.strip()
+        cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
+        self.bili_client = BilibiliClient(
+            proxy=httpx_proxy,
+            headers={
+                "User-Agent": self.user_agent,
+                "Cookie": cookie_str,
+                "Origin": "https://www.bilibili.com",
+                "Referer": "https://www.bilibili.com",
+                "Content-Type": "application/json;charset=UTF-8",
+            },
+            playwright_page=None,
+            cookie_dict=cookie_dict,
+            proxy_ip_pool=self.ip_proxy_pool,
+        )
+        if not cookie_str:
+            utils.logger.warning(
+                "[BilibiliCrawler.start_pure_api] 未提供 Cookie；公开接口可继续采集，"
+                "受登录限制的接口可能失败。"
+            )
+
+        crawler_type_var.set(config.CRAWLER_TYPE)
+        if config.CRAWLER_TYPE == "search":
+            await self.search()
+        elif config.CRAWLER_TYPE == "detail":
+            await self.get_specified_videos(config.BILI_SPECIFIED_ID_LIST)
+        elif config.CRAWLER_TYPE == "creator":
+            if config.CREATOR_MODE:
+                for creator_url in config.BILI_CREATOR_ID_LIST:
+                    try:
+                        creator_info = parse_creator_info_from_url(creator_url)
+                        await self.get_creator_videos(int(creator_info.creator_id))
+                    except ValueError as exc:
+                        utils.logger.error(
+                            f"[BilibiliCrawler.start_pure_api] Failed to parse creator URL: {exc}"
+                        )
+            else:
+                await self.get_all_creator_details(config.BILI_CREATOR_ID_LIST)
+        utils.logger.info("[BilibiliCrawler.start_pure_api] Bilibili Pure API Crawler finished ...")
 
     async def search(self):
         """

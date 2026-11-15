@@ -17,6 +17,7 @@
 # 详细许可条款请参阅项目根目录下的LICENSE文件。
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 # bilili platform configuration
+import os
 
 # Control the number of videos/posts crawled per day
 MAX_NOTES_PER_DAY = 1
@@ -25,22 +26,13 @@ MAX_NOTES_PER_DAY = 1
 # Example:
 # - Full URL: "https://www.bilibili.com/video/BV1dwuKzmE26/?spm_id_from=333.1387.homepage.video_card.click"
 # - BV number: "BV1d54y1g7db"
-BILI_SPECIFIED_ID_LIST = [
-    "https://www.bilibili.com/video/BV1dwuKzmE26/?spm_id_from=333.1387.homepage.video_card.click",
-    "BV1Sz4y1U77N",
-    "BV14Q4y1n7jz",
-    # ........................
-]
+BILI_SPECIFIED_ID_LIST = [item.strip() for item in os.getenv("BILI_SPECIFIED_IDS", "").split(",") if item.strip()]
 
 # Specify the URL list of Bilibili creators (supports full URL or UID)
 # Example:
 # - Full URL: "https://space.bilibili.com/434377496?spm_id_from=333.1007.0.0"
 # - UID: "20813884"
-BILI_CREATOR_ID_LIST = [
-    "https://space.bilibili.com/434377496?spm_id_from=333.1007.0.0",
-    "20813884",
-    # ........................
-]
+BILI_CREATOR_ID_LIST = [item.strip() for item in os.getenv("BILI_CREATOR_IDS", "").split(",") if item.strip()]
 
 # Specify time range
 START_DAY = "2024-01-01"

@@ -18,6 +18,8 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 # Basic configuration
+import os
+
 PLATFORM = "xhs"  # Platform, xhs | dy | ks | goofish | bili | wb | tieba | zhihu | qimai
 
 # 是否使用海外版小红书 (rednote.com)
@@ -176,3 +178,12 @@ from .weibo_config import *
 from .tieba_config import *
 from .zhihu_config import *
 from .qimai_config import *
+
+# Container defaults are isolated through environment variables; CLI arguments still win.
+PLATFORM = os.getenv("CRAWLER_PLATFORM", PLATFORM)
+COOKIES = os.getenv("CRAWLER_COOKIES", COOKIES)
+CRAWLER_TYPE = os.getenv("CRAWLER_TYPE", CRAWLER_TYPE)
+SAVE_DATA_OPTION = os.getenv("SAVE_DATA_OPTION", SAVE_DATA_OPTION)
+ENABLE_PURE_API_MODE = os.getenv(
+    "ENABLE_PURE_API_MODE", str(ENABLE_PURE_API_MODE)
+).strip().lower() in {"1", "true", "yes", "on"}

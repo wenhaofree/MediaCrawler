@@ -63,7 +63,7 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
+        playwright_page: Optional[Page],
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -147,6 +147,8 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         )
 
     async def _get_wbi_keys_from_page(self) -> Optional[Tuple[str, str]]:
+        if self.playwright_page is None:
+            return None
         try:
             local_storage = await self.playwright_page.evaluate("() => window.localStorage")
         except Exception as exc:

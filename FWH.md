@@ -1,3 +1,145 @@
+# 本地开发验证（PostgreSQL + 纯 API）
+
+本章是抖音、B站的当前本地验证入口。采集命令会自动建表；先用**一个账号、一页数据**验证成功，再扩大采集范围。Cookie 只保存在 `.env`，不要写入本文档、`base_config.py` 或提交到 Git。
+
+## 1. 启动顺序
+
+1. PostgreSQL（必须）：先确认本机 `wenhao-postgres` 正在运行，并且宿主机可通过 `127.0.0.1:5432` 连接。
+2. 抖音签名服务（抖音必须，B站不需要）：监听 `127.0.0.1:8999`。
+3. Web/API（可选）：仅在需要 WebUI、日志或定时任务时启动，监听 `8080`；命令行采集不依赖它。
+4. 采集命令：先跑抖音单账号，再跑 B站单账号。
+
+```bash
+# 终端 1：检查并启动 PostgreSQL 容器（容器已运行时 docker start 会提示）
+docker start wenhao-postgres
+docker ps --filter name=wenhao-postgres
+
+# 终端 2：仅抖音需要的签名服务
+node services/sign_srv/server.js
+
+# 终端 3：可选 WebUI/API；命令行采集不需要等待此服务
+uv run uvicorn api.main:app --host 127.0.0.1 --port 8080 --reload
+```
+
+签名服务健康检查应返回 `status: ok`：
+
+```bash
+curl http://127.0.0.1:8999/health
+```
+
+## 2. 本地 `.env` 配置
+
+根目录 `.env` 不会提交到 Git。开发机直连本地 PostgreSQL 时，保持以下数据库配置；若 PostgreSQL 映射到别的端口，只修改 `POSTGRES_DB_HOST` / `POSTGRES_DB_PORT`。
+
+```ini
+POSTGRES_DB_HOST=127.0.0.1
+POSTGRES_DB_PORT=5432
+POSTGRES_DB_USER=postgres
+POSTGRES_DB_PWD=你的数据库密码
+POSTGRES_DB_NAME=media_crawler
+
+# 登录网站后复制完整 Cookie；不要写进 FWH.md
+DY_COOKIES='抖音完整 Cookie'
+BILI_COOKIES='B站完整 Cookie，至少包含 SESSDATA、bili_jct、DedeUserID'
+
+# B站批量账号清单：UID 或 space.bilibili.com 链接，逗号分隔
+BILI_CREATOR_IDS=625267185,13416784,...,452959322
+```
+
+运行命令前让 Shell 读取 `.env`，这样 Cookie 不会出现在终端历史中：
+
+```bash
+set -a
+source .env
+set +a
+```
+
+初始化数据库并确认目标表存在：
+
+```bash
+uv run main.py --init_db postgres
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" \
+  -c "\\dt douyin_*" -c "\\dt bilibili_*"
+```
+
+## 3. 先验证抖音单账号
+
+抖音走纯 API + 本地签名服务，不依赖 Chrome/9222。先抓一页、关闭评论，成功后再提高 `--max_pages` 或切换到批量账号。
+
+```bash
+uv run main.py \
+  --platform dy --type creator --pure_api true --save_data_option postgres \
+  --max_pages 1 --get_comment false --cookies "$DY_COOKIES" \
+  --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"
+```
+
+数据库成功判定：查询有新增作品即可；如果用了带 `--scheduled_slot` 的定时采集，快照也应有记录。
+
+```bash
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT aweme_id, title, liked_count, last_modify_ts
+   FROM douyin_aweme
+   ORDER BY last_modify_ts DESC
+   LIMIT 10;"
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT user_id, collected_at, follower_count, scheduled_slot
+   FROM douyin_creator_stats
+   ORDER BY id DESC
+   LIMIT 10;"
+```
+
+## 4. 再验证 B站单账号
+
+B站在纯 API 模式下不启动 Playwright；`--cookies "$BILI_COOKIES"` 会传入 `.env` 的 Cookie，WBI 签名密钥由接口自动获取。B站视频与评论使用 Upsert，重复运行会更新已有记录而不会重复插入。
+
+```bash
+uv run main.py \
+  --platform bili --type creator --pure_api true --save_data_option postgres \
+  --max_pages 1 --get_comment false --cookies "$BILI_COOKIES" \
+  --creator_id "625267185"
+```
+
+数据库成功判定：`bilibili_video` 至少出现目标 UP 主的视频；如果开启评论，`bilibili_video_comment` 也应有记录。
+
+```bash
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT user_id, nickname, total_fans, total_liked, user_rank, last_modify_ts
+   FROM bilibili_up_info
+   ORDER BY last_modify_ts DESC
+   LIMIT 10;"
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT video_id, title, user_id, video_play_count, last_modify_ts
+   FROM bilibili_video
+   ORDER BY last_modify_ts DESC
+   LIMIT 10;"
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT comment_id, video_id, content, create_time
+   FROM bilibili_video_comment
+   ORDER BY last_modify_ts DESC
+   LIMIT 10;"
+```
+
+通过单账号验证后，使用 `.env` 中已配置的 B站账号列表跑批量采集：
+
+```bash
+uv run main.py \
+  --platform bili --type creator --pure_api true --save_data_option postgres \
+  --max_pages 3 --get_comment false --cookies "$BILI_COOKIES" \
+  --creator_id "$BILI_CREATOR_IDS"
+```
+
+> Chrome/9222 只保留给小红书、闲鱼、七麦或需要人工登录排障的平台；本节的抖音、B站验证无需启动 Chrome。
+
 # TODO：
 - 添加抖音账号接口✅
 - 抖音账号快照✅（`douyin_creator_stats`）
@@ -33,7 +175,7 @@ Web 定时任务 `run_time` 可填：`09:00,14:00,22:30`。
 
 按照以下步骤配置并运行数据爬取与展示服务。
 
-## 1. 启动 Chrome 远程调试端口
+## 历史：启动 Chrome 远程调试端口（仅需浏览器的平台）
 
 在终端中执行以下命令，以允许程序通过 CDP (Chrome DevTools Protocol) 控制浏览器：
 
@@ -50,7 +192,7 @@ open -na "Google Chrome" --args \
 
 ---
 
-## 2. 配置数据存储方式
+## 历史：配置 SQLite 存储方式
 
 编辑项目中的 `base_config.py` 文件，将数据保存选项设置为 **SQLite**：
 
@@ -66,7 +208,7 @@ ENABLE_GET_COMMENTS = False
 
 ---
 
-## 3. 执行数据爬取
+## 其他平台采集示例
 
 使用 `uv` 运行爬虫脚本。创作者采集使用 `--type creator`，关键词搜索使用 `--type search`。
 
@@ -171,7 +313,7 @@ uv run main.py --platform qimai --lt qrcode --type search --keywords "微信" --
 
 ---
 
-## 4. 启动可视化验证服务
+## 历史：启动 SQLite 可视化验证服务
 
 数据爬取完成后，可以启动 Uvicorn 服务来查看本地存储的数据：
 
@@ -303,10 +445,10 @@ pm2 start services/sign_srv/server.js --name sign-srv
 ```
 
 #### 2. 配置登录态 (推荐方式 ⭐⭐⭐⭐⭐)
-直接将登录 Cookie 写入配置文件 `config/base_config.py`，避免在终端中传递超长字符串导致特殊字符转义：
-```python
-# config/base_config.py
-COOKIES = "passport_csrf_token=xxx; sessionid=你的sessionid; ttwid=xxx; ..."
+将登录 Cookie 写入 Git 忽略的 `.env`，避免在终端中传递超长字符串，也不要写入 `config/base_config.py`：
+```ini
+# .env
+DY_COOKIES='passport_csrf_token=xxx; sessionid=你的sessionid; ttwid=xxx; ...'
 ```
 
 > **如何获取 Cookie**：在 Chrome 浏览器中登录抖音 `https://www.douyin.com/` -> 按 `F12` 打开开发者工具切换到 **Network (网络)** 标签页 -> 刷新页面点击任一请求 -> 在右侧 **Request Headers** 中找到 `Cookie:` 右键选择 **Copy value** 即可。
@@ -316,8 +458,9 @@ COOKIES = "passport_csrf_token=xxx; sessionid=你的sessionid; ttwid=xxx; ..."
 # 纯 API 采集创作者视频 (无需启动 Chrome，不占用 9222 端口)
 uv run main.py --platform dy --type creator --max_pages 3 --pure_api true --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"
 
-# 临时传入 Cookie 的方式 (如果未在 base_config.py 中配置)
-uv run main.py --platform dy --type creator --max_pages 3 --pure_api true --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk" --cookies "你的完整Cookie"
+# 读取 .env 后传入 Cookie
+set -a; source .env; set +a
+uv run main.py --platform dy --type creator --max_pages 3 --pure_api true --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk" --cookies "$DY_COOKIES"
 
 # 采集账号一整年历史数据 (设置 --max_pages 0 不限页数向历史倒序全量采集)
 uv run main.py --platform dy --type creator --max_pages 0 --pure_api true --save_data_option sqlite --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"

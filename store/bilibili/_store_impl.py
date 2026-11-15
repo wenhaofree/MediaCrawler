@@ -36,7 +36,7 @@ from sqlalchemy.orm import sessionmaker
 import config
 from base.base_crawler import AbstractStore
 from database.db_session import get_session
-from database.models import BilibiliVideoComment, BilibiliVideo, BilibiliUpDynamic
+from database.models import BilibiliUpInfo, BilibiliVideoComment, BilibiliVideo, BilibiliUpDynamic
 from tools.async_file_writer import AsyncFileWriter
 from tools import utils, words
 from var import crawler_type_var
@@ -175,8 +175,31 @@ class BiliDbStoreImplement(AbstractStore):
             await session.commit()
 
     async def store_creator(self, creator: Dict):
-        # 教学版：UP 主个人资料不再落库
-        pass
+        """Upsert a monitored UP's public profile by Bilibili UID."""
+        creator_id = creator.get("user_id")
+        if creator_id in (None, ""):
+            return
+
+        creator["user_id"] = int(creator_id)
+        for field in ("total_fans", "total_liked", "user_rank", "is_official"):
+            if creator.get(field) is not None:
+                creator[field] = int(creator[field])
+
+        async with get_session() as session:
+            result = await session.execute(
+                select(BilibiliUpInfo).where(BilibiliUpInfo.user_id == creator["user_id"])
+            )
+            creator_detail = result.scalars().first()
+
+            if not creator_detail:
+                creator["add_ts"] = utils.get_current_timestamp()
+                creator["last_modify_ts"] = utils.get_current_timestamp()
+                session.add(BilibiliUpInfo(**creator))
+            else:
+                creator["last_modify_ts"] = utils.get_current_timestamp()
+                for key, value in creator.items():
+                    setattr(creator_detail, key, value)
+            await session.commit()
 
     async def store_contact(self, contact_item: Dict):
         # 教学版：UP-粉丝关系表已移除，不再存储联系人信息

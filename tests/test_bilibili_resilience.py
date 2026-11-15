@@ -58,6 +58,37 @@ async def test_get_wbi_keys_falls_back_to_nav_when_page_is_closed():
 
 
 @pytest.mark.asyncio
+async def test_get_wbi_keys_falls_back_to_nav_without_playwright():
+    client = BilibiliClient(headers={}, playwright_page=None, cookie_dict={})
+
+    async def fake_request(method, url, **kwargs):
+        assert (method, url) == ("GET", "https://api.bilibili.com/x/web-interface/nav")
+        return {
+            "wbi_img": {
+                "img_url": "https://i0.hdslb.com/bfs/wbi/nav_img_key.png",
+                "sub_url": "https://i0.hdslb.com/bfs/wbi/nav_sub_key.png",
+            }
+        }
+
+    client.request = fake_request  # type: ignore[method-assign]
+    assert await client.get_wbi_keys() == ("nav_img_key", "nav_sub_key")
+
+
+@pytest.mark.asyncio
+async def test_bilibili_start_uses_pure_api_mode_without_browser(monkeypatch):
+    crawler = BilibiliCrawler()
+    called = []
+    monkeypatch.setattr(config, "ENABLE_PURE_API_MODE", True)
+
+    async def fake_start_pure_api(proxy):
+        called.append(proxy)
+
+    crawler.start_pure_api = fake_start_pure_api  # type: ignore[method-assign]
+    await crawler.start()
+    assert called == [None]
+
+
+@pytest.mark.asyncio
 async def test_get_wbi_keys_uses_cached_page_keys():
     page = StoragePage()
     client = BilibiliClient(

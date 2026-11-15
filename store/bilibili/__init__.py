@@ -84,8 +84,28 @@ async def update_bilibili_video(video_item: Dict):
 
 
 async def update_up_info(video_item: Dict):
-    # 教学版：UP 主个人资料(昵称/性别/签名/头像/粉丝数等)不再落库，防骚扰。
-    return
+    card_data = video_item.get("Card") or {}
+    card = card_data.get("card") or {}
+    owner = (video_item.get("View") or {}).get("owner") or {}
+    user_id = card.get("mid") or owner.get("mid")
+    if user_id is None:
+        utils.logger.warning("[store.bilibili.update_up_info] missing UP UID; skip profile storage")
+        return
+
+    save_up_info = {
+        "user_id": user_id,
+        "nickname": card.get("name") or owner.get("name"),
+        "sex": card.get("sex"),
+        "sign": card.get("sign"),
+        "avatar": card.get("face") or owner.get("face"),
+        "total_fans": card.get("fans"),
+        "total_liked": card_data.get("like_num"),
+        "user_rank": (card.get("level_info") or {}).get("current_level"),
+        "is_official": (card.get("official_verify") or {}).get("type"),
+    }
+    save_up_info = {key: value for key, value in save_up_info.items() if value is not None}
+    utils.logger.info(f"[store.bilibili.update_up_info] bilibili user_id:{user_id}")
+    await BiliStoreFactory.create_store().store_creator(creator=save_up_info)
 
 
 async def batch_update_bilibili_video_comments(video_id: str, comments: List[Dict]):

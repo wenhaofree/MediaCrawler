@@ -1,14 +1,15 @@
 services:
-  # MediaCrawler API 核心采集服务 (集成 FastAPI + Node 签名微服务)
-  mediacrawler:
+  # 抖音采集服务（容器名以 -dy 区分）
+  mediacrawler-dy:
+    image: mediacrawler:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: mediacrawler-app
+    container_name: mediacrawler-dy
     restart: unless-stopped
     ports:
       # 宿主机端口可根据实际情况自定义 (默认 8085，避开常见的 8080 冲突)，容器内部保持 8080
-      - "${APP_PORT:-8085}:8080"
+      - "${DY_APP_PORT:-8085}:8080"
     environment:
       # 1. 兼容标准连接串 DATABASE_URL，直接连接已有的容器数据库 wenhao-postgres
       DATABASE_URL: postgresql://${POSTGRES_DB_USER:-postgres}:${POSTGRES_DB_PWD:-fuwenhao}@wenhao-postgres:5432/${POSTGRES_DB_NAME:-media_crawler}
@@ -24,6 +25,9 @@ services:
       SAVE_DATA_OPTION: postgres
       AUTO_INIT_DB: "true"
       TZ: Asia/Shanghai
+      CRAWLER_PLATFORM: dy
+      CRAWLER_COOKIES: "${DY_COOKIES:-}"
+      ENABLE_PURE_API_MODE: "true"
 
       # 4. 调度元数据持久化到挂载目录（容器重建后定时任务不丢）
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
@@ -41,12 +45,46 @@ services:
 
     volumes:
       # 挂载宿主机数据与日志目录（防止容器重启数据丢失；含调度 SQLite）
-      - ./data:/app/data
+      - ./data/dy:/app/data
       # 挂载本地配置文件（随时在宿主机修改 Cookie，无需重新打镜像）
       - ./.env:/app/.env:ro
       - ./config/base_config.py:/app/config/base_config.py:ro
 
     # 加入已有公共网络 wenhao-services
+    networks:
+      - wenhao-services
+
+  # B站采集服务（容器名以 -bili 区分，共用镜像与 PostgreSQL）
+  mediacrawler-bili:
+    image: mediacrawler:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mediacrawler-bili
+    restart: unless-stopped
+    ports:
+      - "${BILI_APP_PORT:-8086}:8080"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_DB_USER:-postgres}:${POSTGRES_DB_PWD:-fuwenhao}@wenhao-postgres:5432/${POSTGRES_DB_NAME:-media_crawler}
+      POSTGRES_DB_HOST: wenhao-postgres
+      POSTGRES_DB_PORT: 5432
+      POSTGRES_DB_USER: ${POSTGRES_DB_USER:-postgres}
+      POSTGRES_DB_PWD: ${POSTGRES_DB_PWD:-fuwenhao}
+      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-media_crawler}
+      SAVE_DATA_OPTION: postgres
+      AUTO_INIT_DB: "false"
+      TZ: Asia/Shanghai
+      SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      CRAWLER_PLATFORM: bili
+      CRAWLER_COOKIES: "${BILI_COOKIES:-}"
+      BILI_CREATOR_IDS: "${BILI_CREATOR_IDS:-}"
+      BILI_SPECIFIED_IDS: "${BILI_SPECIFIED_IDS:-}"
+      ENABLE_PURE_API_MODE: "true"
+      AUTO_SEED_DY_SCHEDULE: "false"
+    volumes:
+      - ./data/bili:/app/data
+      - ./.env:/app/.env:ro
+      - ./config/base_config.py:/app/config/base_config.py:ro
     networks:
       - wenhao-services
 
