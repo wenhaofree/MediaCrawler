@@ -159,6 +159,11 @@ async def save_creator(user_id: str, creator: Dict):
     avatar = profile.get("image") or profile.get("avatar") or profile.get("images") or ""
     if isinstance(avatar, list):
         avatar = avatar[0] if avatar else ""
+    interaction_counts = {
+        str(item.get("type")): item.get("count", "")
+        for item in (creator.get("interactions") or profile.get("interactions") or [])
+        if isinstance(item, dict)
+    }
     local_db_item = {
         "user_id": user_id,
         "nickname": profile.get("nickname", ""),
@@ -166,9 +171,9 @@ async def save_creator(user_id: str, creator: Dict):
         "ip_location": profile.get("ip_location", ""),
         "desc": profile.get("desc", ""),
         "gender": str(profile["gender"]) if profile.get("gender") is not None else "",
-        "follows": str(profile.get("follows", "")),
-        "fans": str(profile.get("fans", "")),
-        "interaction": str(profile.get("interaction", "")),
+        "follows": str(interaction_counts.get("follows", profile.get("follows", ""))),
+        "fans": str(interaction_counts.get("fans", profile.get("fans", ""))),
+        "interaction": str(interaction_counts.get("interaction", profile.get("interaction", ""))),
         "tag_list": ",".join(profile.get("tags", [])) if isinstance(profile.get("tags"), list) else "",
     }
     await XhsStoreFactory.create_store().store_creator(local_db_item)

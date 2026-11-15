@@ -63,8 +63,20 @@ def test_xhs_creator_gender_is_stored_as_text(monkeypatch):
 
     asyncio.run(
         xhs_store.save_creator(
-            "xhs-user", {"basic_info": {"nickname": "creator", "gender": 0}}
+            "xhs-user",
+            {
+                "basicInfo": {"nickname": "creator", "gender": 0},
+                "interactions": [
+                    {"type": "follows", "count": "123"},
+                    {"type": "fans", "count": "1.2万"},
+                    {"type": "interaction", "count": "3.4万"},
+                ],
+            },
         )
     )
 
-    assert store_creator.await_args.args[0]["gender"] == "0"
+    stored = store_creator.await_args.args[0]
+    assert stored["gender"] == "0"
+    assert stored["follows"] == "123"
+    assert stored["fans"] == "1.2万"
+    assert stored["interaction"] == "3.4万"
