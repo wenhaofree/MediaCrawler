@@ -213,6 +213,31 @@ async def test_xhs_scheduled_task_uses_pure_api_without_cdp(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_xhs_default_schedule_is_one_daily_safe_creator_run(tmp_path, monkeypatch):
+    service = await _build_service(tmp_path, monkeypatch)
+    monkeypatch.setenv("AUTO_SEED_XHS_SCHEDULE", "true")
+    monkeypatch.setenv(
+        "XHS_CREATOR_IDS",
+        "5b4e046811be1031e22f19d8,640c29eb000000001001c91b",
+    )
+    monkeypatch.setenv("XHS_SCHEDULE_RUN_TIME", "10:30")
+
+    await service.ensure_default_xhs_schedule()
+    task = (await service.list_tasks())["tasks"][0]
+
+    assert task["name"] == "小红书每日安全快照(自动)"
+    assert task["platform"] == "xhs"
+    assert task["run_time"] == "10:30"
+    assert task["max_pages"] == 1
+    assert task["enable_comments"] is False
+    assert [creator["normalized_creator_id"] for creator in task["creators"]] == [
+        "5b4e046811be1031e22f19d8"
+    ]
+
+    await service.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_bilibili_default_schedule_uses_configured_frequency(tmp_path, monkeypatch):
     service = await _build_service(tmp_path, monkeypatch)
     monkeypatch.setenv("AUTO_SEED_BILI_SCHEDULE", "true")

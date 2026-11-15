@@ -164,6 +164,10 @@ XHS_MAX_PAGES=1
 XHS_MAX_CREATORS_PER_RUN=1
 XHS_REQUEST_INTERVAL_MIN_SEC=8
 XHS_REQUEST_INTERVAL_MAX_SEC=15
+# 每天仅一次；自动任务只使用第一个 XHS_CREATOR_IDS 作者，固定单页
+AUTO_SEED_XHS_SCHEDULE=true
+XHS_SCHEDULE_RUN_TIME=10:30
+XHS_SCHEDULE_TASK_NAME=小红书每日安全快照(自动)
 ```
 
 本地先抓一页，关闭评论，确认作者、笔记和快照都已写入 PostgreSQL：
@@ -202,6 +206,13 @@ docker exec -it mediacrawler-xhs uv run python main.py \
 ```
 
 `mediacrawler-xhs` 默认监听 `${XHS_APP_PORT:-8087}`、持久化目录为 `./data/xhs`，与 `mediacrawler-dy` / `mediacrawler-bili` 使用同一个 PostgreSQL。定时任务页的小红书任务同样走纯 API，不依赖外部 CDP/9222；可保存 user_id，带有效 `xsec_token` 的完整主页 URL 更稳定。
+
+小红书容器启动时会自动创建 `小红书每日安全快照(自动)`：默认每天 `10:30`（Asia/Shanghai）仅执行一次，固定单作者、单页、无评论和媒体下载。`XHS_SCHEDULE_RUN_TIME` 必须仅填写一个 `HH:MM` 时间；若 `XHS_CREATOR_IDS` 配置多个作者，自动任务只使用第一个，以避免短时间连续请求。修改后重启容器生效：
+
+```bash
+docker compose up -d --build mediacrawler-xhs
+docker compose logs -f mediacrawler-xhs
+```
 
 安全策略：Cookie 只会作为 HTTP 请求头发送；如果登录态校验失败、出现限流或账号安全限制，会立即停止当前请求，不会降级为扫码或持续重试。默认安全模式限制为单账号、单页、单并发，且在请求之间随机等待 8～15 秒；请保持该默认值，避免短时间连续运行或切换 IP。
 

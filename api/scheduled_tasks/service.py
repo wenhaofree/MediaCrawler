@@ -48,6 +48,7 @@ TASKS_PAGE_SIZE = 20
 RUNS_PAGE_SIZE = 20
 DEFAULT_DY_SCHEDULE_TASK_NAME = "抖音增长快照(自动)"
 DEFAULT_BILI_SCHEDULE_TASK_NAME = "B站增长快照(自动)"
+DEFAULT_XHS_SCHEDULE_TASK_NAME = "小红书每日安全快照(自动)"
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -461,6 +462,7 @@ class ScheduledTaskService:
         await self.ensure_tables()
         await self.ensure_default_douyin_schedule()
         await self.ensure_default_bilibili_schedule()
+        await self.ensure_default_xhs_schedule()
         self._worker_task = asyncio.create_task(self._worker_loop())
         self._started = True
         await self.refresh_all_schedules()
@@ -696,6 +698,75 @@ class ScheduledTaskService:
                 created.get("id"),
                 run_time,
                 len(creators),
+            )
+
+    async def ensure_default_xhs_schedule(self) -> None:
+        """Seed one conservative Xiaohongshu creator snapshot per day."""
+        if not _env_flag("AUTO_SEED_XHS_SCHEDULE", default=False):
+            return
+
+        creators = [
+            item.strip()
+            for item in os.getenv("XHS_CREATOR_IDS", "").split(",")
+            if item.strip()
+        ]
+        if not creators:
+            utils.logger.warning(
+                "[ScheduledTaskService.ensure_default_xhs_schedule] "
+                "XHS_CREATOR_IDS is empty; skip seeding"
+            )
+            return
+        if len(creators) > 1:
+            utils.logger.warning(
+                "[ScheduledTaskService.ensure_default_xhs_schedule] "
+                "only the first XHS creator is scheduled to limit account risk"
+            )
+            creators = creators[:1]
+
+        run_time = os.getenv("XHS_SCHEDULE_RUN_TIME", "10:30").strip() or "10:30"
+        task_name = os.getenv("XHS_SCHEDULE_TASK_NAME", DEFAULT_XHS_SCHEDULE_TASK_NAME).strip() or DEFAULT_XHS_SCHEDULE_TASK_NAME
+        try:
+            if len(_parse_run_times(run_time)) != 1:
+                raise ValueError("XHS schedule must contain exactly one daily run time")
+        except Exception as exc:
+            utils.logger.error(
+                "[ScheduledTaskService.ensure_default_xhs_schedule] invalid seed config: %s",
+                exc,
+            )
+            return
+
+        async with _get_connection() as db:
+            existing = await _fetchone(
+                db,
+                "SELECT id FROM scheduled_crawl_task WHERE name = ? AND platform = 'xhs' LIMIT 1",
+                (task_name,),
+            )
+
+        payload = ScheduledTaskUpsertRequest(
+            name=task_name,
+            platform=PlatformEnum.XHS,
+            run_time=run_time,
+            max_pages=1,
+            enable_comments=False,
+            enable_sub_comments=False,
+            save_option=SaveDataOptionEnum.POSTGRES,
+            status="active",
+            creators=creators,
+        )
+        if existing:
+            task_id = int(existing["id"])
+            await self.update_task(task_id, payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_xhs_schedule] updated task #%s run_time=%s",
+                task_id,
+                run_time,
+            )
+        else:
+            created = await self.create_task(payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_xhs_schedule] created task #%s run_time=%s",
+                created.get("id"),
+                run_time,
             )
 
     async def shutdown(self) -> None:
