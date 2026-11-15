@@ -18,6 +18,7 @@ from __future__ import annotations
 import config
 import pytest
 from cmd_arg import parse_cmd
+from cmd_arg import arg as cmd_arg_module
 
 
 @pytest.fixture(autouse=True)
@@ -71,3 +72,34 @@ async def test_get_media_returns_value_in_namespace():
     args = await parse_cmd([*BASE_ARGS, "--get_media", "true"])
 
     assert args.get_media is True
+
+
+@pytest.mark.asyncio
+async def test_xhs_uses_env_cookie_without_shell_source(monkeypatch):
+    monkeypatch.setenv("XHS_COOKIES", "a1=xhs-cookie")
+    monkeypatch.setattr(config, "COOKIES", "fallback-cookie")
+
+    args = await parse_cmd(["--platform", "xhs", "--type", "creator"])
+
+    assert args.cookies == "a1=xhs-cookie"
+    assert config.COOKIES == "a1=xhs-cookie"
+
+
+@pytest.mark.asyncio
+async def test_xhs_shell_values_fall_back_to_latest_dotenv_creator(monkeypatch):
+    monkeypatch.setenv("XHS_COOKIES", "")
+    monkeypatch.setenv("XHS_CREATOR_IDS", "shell-stale-creator")
+    monkeypatch.setattr(config, "COOKIES", "")
+    monkeypatch.setattr(config, "XHS_CREATOR_ID_LIST", [])
+    monkeypatch.setattr(
+        cmd_arg_module,
+        "dotenv_values",
+        lambda: {"XHS_COOKIES": "a1=dotenv-cookie", "XHS_CREATOR_IDS": "creator-id"},
+    )
+
+    args = await parse_cmd(
+        ["--platform", "xhs", "--type", "creator", "--cookies", "", "--creator_id", ""]
+    )
+
+    assert args.cookies == "a1=dotenv-cookie"
+    assert config.XHS_CREATOR_ID_LIST == ["creator-id"]

@@ -267,6 +267,18 @@ async def test_xhs_start_uses_pure_api_without_browser(monkeypatch):
     assert not hasattr(crawler, "browser_context")
 
 
+@pytest.mark.asyncio
+async def test_xhs_creator_start_rejects_an_empty_creator_list(monkeypatch):
+    crawler = XiaoHongShuCrawler()
+
+    monkeypatch.setattr(config, "COOKIES", "a1=cookie-a1")
+    monkeypatch.setattr(config, "CRAWLER_TYPE", "creator")
+    monkeypatch.setattr(config, "XHS_CREATOR_ID_LIST", [])
+
+    with pytest.raises(RuntimeError, match="XHS_CREATOR_IDS or --creator_id"):
+        await crawler.start()
+
+
 def test_xhs_extractor_reads_creator_notes_from_html_snapshot():
     extractor = XiaoHongShuExtractor()
     html = """

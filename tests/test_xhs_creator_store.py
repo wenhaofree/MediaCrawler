@@ -1,4 +1,6 @@
 import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -9,6 +11,7 @@ from database import db_session
 from database.models import Base, XhsCreator, XhsCreatorStats, XhsNoteStats
 from media_platform.douyin.lifecycle import parse_count
 from store.xhs._store_impl import XhsDbStoreImplement
+from store import xhs as xhs_store
 from var import reset_xhs_creator_stats_seen
 
 
@@ -48,3 +51,20 @@ def test_xhs_creator_and_note_snapshots_are_append_only(monkeypatch):
 def test_parse_count_supports_xhs_abbreviations():
     assert parse_count("1.5万") == 15_000
     assert parse_count("2亿") == 200_000_000
+
+
+def test_xhs_creator_gender_is_stored_as_text(monkeypatch):
+    store_creator = AsyncMock()
+    monkeypatch.setattr(
+        xhs_store.XhsStoreFactory,
+        "create_store",
+        lambda: SimpleNamespace(store_creator=store_creator),
+    )
+
+    asyncio.run(
+        xhs_store.save_creator(
+            "xhs-user", {"basic_info": {"nickname": "creator", "gender": 0}}
+        )
+    )
+
+    assert store_creator.await_args.args[0]["gender"] == "0"

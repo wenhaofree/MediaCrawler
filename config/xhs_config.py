@@ -42,7 +42,7 @@ XHS_SPECIFIED_NOTE_URL_LIST = [
     # ........................
 ]
 
-# Specify the creator URL list, which needs to carry xsec_token and xsec_source parameters.
+# Specify creator IDs or homepage URLs. URLs may carry xsec_token and xsec_source.
 
 XHS_CREATOR_ID_LIST = [
     item.strip() for item in os.getenv("XHS_CREATOR_IDS", "").split(",") if item.strip()

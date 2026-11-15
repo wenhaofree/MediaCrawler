@@ -21,13 +21,15 @@
 from __future__ import annotations
 
 
-import sys
+import os
 import re
+import sys
 from enum import Enum
 from types import SimpleNamespace
 from typing import Iterable, Optional, Sequence, Type, TypeVar
 
 import typer
+from dotenv import dotenv_values
 from typing_extensions import Annotated
 
 import config
@@ -154,8 +156,19 @@ def _normalize_tieba_creator_url(value: str) -> str:
     return f"https://tieba.baidu.com/home/main?id={value}"
 
 
+def _env_or_dotenv(name: str) -> str:
+    return os.getenv(name) or str(dotenv_values().get(name) or "")
+
+
+def _dotenv_or_env(name: str) -> str:
+    return str(dotenv_values().get(name) or os.getenv(name) or "")
+
+
 async def parse_cmd(argv: Optional[Sequence[str]] = None):
     """Parse command line arguments using Typer."""
+
+    cli_args = _inject_init_db_default(_normalize_argv(argv))
+    cookies_supplied = any(arg == "--cookies" or arg.startswith("--cookies=") for arg in cli_args)
 
     app = typer.Typer(add_completion=False)
 
@@ -444,6 +457,13 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         creator_id_list = [id.strip() for id in creator_id.split(",") if id.strip()] if creator_id else []
 
         # override global config
+        cookie_env_name = {
+            PlatformEnum.XHS: "XHS_COOKIES",
+            PlatformEnum.DOUYIN: "DY_COOKIES",
+            PlatformEnum.BILIBILI: "BILI_COOKIES",
+        }.get(platform)
+        if cookie_env_name and (not cookies_supplied or not cookies.strip()):
+            cookies = _env_or_dotenv(cookie_env_name) or cookies
         config.PLATFORM = platform.value
         config.LOGIN_TYPE = lt.value
         config.CRAWLER_TYPE = crawler_type.value
@@ -516,6 +536,12 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                     f"https://www.zhihu.com/people/{item}" if not item.startswith("http") else item
                     for item in creator_id_list
                 ]
+        elif platform == PlatformEnum.XHS:
+            configured_creators = _dotenv_or_env("XHS_CREATOR_IDS")
+            if configured_creators:
+                config.XHS_CREATOR_ID_LIST = [
+                    item.strip() for item in configured_creators.split(",") if item.strip()
+                ]
 
         return SimpleNamespace(
             platform=config.PLATFORM,
@@ -545,9 +571,6 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
         )
 
     command = typer.main.get_command(app)
-
-    cli_args = _normalize_argv(argv)
-    cli_args = _inject_init_db_default(cli_args)
 
     try:
         result = command.main(args=cli_args, standalone_mode=False)

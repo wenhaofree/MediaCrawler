@@ -165,7 +165,7 @@ async def save_creator(user_id: str, creator: Dict):
         "avatar": avatar,
         "ip_location": profile.get("ip_location", ""),
         "desc": profile.get("desc", ""),
-        "gender": profile.get("gender", ""),
+        "gender": str(profile["gender"]) if profile.get("gender") is not None else "",
         "follows": str(profile.get("follows", "")),
         "fans": str(profile.get("fans", "")),
         "interaction": str(profile.get("interaction", "")),

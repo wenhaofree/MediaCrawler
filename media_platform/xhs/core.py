@@ -98,6 +98,8 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
         if not config.COOKIES.strip():
             raise RuntimeError("XHS pure API requires a non-empty XHS_COOKIES value")
+        if config.CRAWLER_TYPE == "creator" and not config.XHS_CREATOR_ID_LIST:
+            raise RuntimeError("XHS creator crawl requires XHS_CREATOR_IDS or --creator_id")
         self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
         if not await self.xhs_client.pong():
             raise RuntimeError("XHS Cookie is invalid or expired; stop without browser fallback")
