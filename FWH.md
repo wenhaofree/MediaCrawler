@@ -153,7 +153,65 @@ uv run main.py \
   --creator_id "$BILI_CREATOR_IDS"
 ```
 
-> Chrome/9222 只保留给小红书、闲鱼、七麦或需要人工登录排障的平台；本节的抖音、B站验证无需启动 Chrome。
+> Chrome/9222 只保留给闲鱼、七麦或需要人工登录排障的平台；本节的抖音、B站和小红书验证无需启动 Chrome。
+
+## 5. 小红书：作者、笔记与快照
+
+小红书和抖音一样使用纯 HTTP API + 本地签名，不启动 Chromium、不连接 9222，也不支持二维码回退。Docker 的 `mediacrawler-xhs` 不安装浏览器；Cookie 失效时先在本机浏览器完成登录并重新复制 Cookie，再更新服务器 `.env`。
+
+`.env` 增加完整 Cookie 和带 `xsec_token`、`xsec_source` 的作者主页 URL；多个账号以逗号分隔：
+
+```ini
+XHS_COOKIES='小红书完整 Cookie'
+XHS_CREATOR_IDS='https://www.xiaohongshu.com/user/profile/<user_id>?xsec_token=<token>&xsec_source=pc_search'
+# 保守模式：强制单并发、单作者、单页，关闭评论和媒体下载
+XHS_SAFE_MODE=true
+XHS_MAX_PAGES=1
+XHS_MAX_CREATORS_PER_RUN=1
+XHS_REQUEST_INTERVAL_MIN_SEC=8
+XHS_REQUEST_INTERVAL_MAX_SEC=15
+```
+
+本地先抓一页，关闭评论，确认作者、笔记和快照都已写入 PostgreSQL：
+
+```bash
+set -a; source .env; set +a
+uv run main.py --platform xhs --lt cookie --type creator \
+  --pure_api true --save_data_option postgres --max_pages 1 --get_comment false \
+  --cookies "$XHS_COOKIES" --creator_id "$XHS_CREATOR_IDS"
+```
+
+```bash
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT user_id, nickname, fans, follows, last_modify_ts FROM xhs_creator ORDER BY last_modify_ts DESC LIMIT 10;"
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT note_id, liked_count, collected_count, comment_count, share_count FROM xhs_note_stats ORDER BY id DESC LIMIT 10;"
+
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT user_id, follower_count, following_count, interaction_count, collected_at FROM xhs_creator_stats ORDER BY id DESC LIMIT 10;"
+```
+
+重复采集会更新 `xhs_creator`、`xhs_note` 主表，并向 `xhs_creator_stats`、`xhs_note_stats` 追加一条快照，可直接作为趋势图的时间序列。
+
+服务器部署：
+
+```bash
+docker compose up -d --build mediacrawler-xhs
+docker compose logs -f mediacrawler-xhs
+
+# 在独立 -xhs 容器中执行一次采集验证
+docker exec -it mediacrawler-xhs uv run python main.py \
+  --platform xhs --lt cookie --type creator --save_data_option postgres \
+  --pure_api true --max_pages 1 --get_comment false
+```
+
+`mediacrawler-xhs` 默认监听 `${XHS_APP_PORT:-8087}`、持久化目录为 `./data/xhs`，与 `mediacrawler-dy` / `mediacrawler-bili` 使用同一个 PostgreSQL。定时任务页的小红书任务同样走纯 API，不依赖外部 CDP/9222；保存任务时需要带有效 `xsec_token` 的完整主页 URL。
+
+安全策略：Cookie 只会作为 HTTP 请求头发送；如果登录态校验失败、出现限流或账号安全限制，会立即停止当前请求，不会降级为扫码或持续重试。默认安全模式限制为单账号、单页、单并发，且在请求之间随机等待 8～15 秒；请保持该默认值，避免短时间连续运行或切换 IP。
 
 # TODO：
 - 添加抖音账号接口✅
@@ -236,7 +294,7 @@ uv run main.py --platform dy --lt qrcode --type creator --creator_id "MS4wLjABAA
 
 uv run main.py --platform bili --lt qrcode --type creator --creator_id "625267185" --max_pages 3
 
-uv run main.py --platform xhs --lt qrcode --type creator --creator_id "https://www.xiaohongshu.com/user/profile/640c29eb000000001001c91b?xsec_token=ABhC5chjrgmTjNDSBeeLLNtrpvHHHA3Zz8u3s5duXIRO0%3D&xsec_source=pc_search"
+uv run main.py --platform xhs --lt cookie --type creator --pure_api true --cookies "$XHS_COOKIES" --creator_id "$XHS_CREATOR_IDS"
 
 uv run main.py --platform wb --lt qrcode --type creator --creator_id "5648162302"
 
@@ -259,7 +317,7 @@ uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type paid -
 **参数说明：**
 
 - `--platform`: 指定平台，常用值：`dy` 抖音、`bili` B站、`xhs` 小红书、`wb` 微博、`zhihu` 知乎、`goofish` 闲鱼、`qimai` 七麦。
-- `--lt qrcode`: 登录方式为二维码；闲鱼/七麦通常复用 CDP 浏览器会话，遇到登录/风控时在 Chrome 窗口里手动处理。
+- `--lt qrcode`: 登录方式为二维码；闲鱼/七麦通常复用 CDP 浏览器会话，遇到登录/风控时在 Chrome 窗口里手动处理。小红书使用 `--lt cookie --pure_api true`。
 - `--type creator`: 爬取创作者主页数据。
 - `--type search`: 按关键词搜索；闲鱼当前只支持该模式，七麦用于搜索 App。
 - `--type detail`: 按指定内容 ID 采集详情；七麦传 App ID。
@@ -346,7 +404,7 @@ uv run uvicorn api.main:app --port 8080 --reload
 
 ### 定时任务配置：
 
-- 前提是打开9222浏览器端口，并登录对应平台账号
+- 小红书、抖音和 B 站的纯 API 任务不需要 9222；其他浏览器型平台才需要已登录的 9222 会话。
   http://127.0.0.1:8080/schedule-tasks
 
 ### 一次性批量采集命令 (支持多 ID)：
@@ -364,8 +422,8 @@ uv run main.py --platform wb --lt qrcode --type creator --max_pages 3 --creator_
 # 知乎
 uv run main.py --platform zhihu --lt qrcode --type creator --max_pages 3 --creator_id "morgancheng"
 
-# 小红书
-uv run main.py --platform xhs --lt qrcode --type creator --max_pages 3 --creator_id "640c29eb000000001001c91b,5b4e046811be1031e22f19d8"
+# 小红书（完整主页 URL 必须含 xsec_token）
+uv run main.py --platform xhs --lt cookie --type creator --pure_api true --max_pages 1 --get_comment false --cookies "$XHS_COOKIES" --creator_id "$XHS_CREATOR_IDS"
 
 # 闲鱼：关键词搜索商品
 uv run main.py --platform goofish --lt qrcode --type search --keywords "耳机,键盘" --crawler_max_notes_count 60 --save_data_option sqlite

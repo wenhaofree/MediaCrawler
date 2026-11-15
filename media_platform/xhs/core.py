@@ -18,18 +18,10 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 import asyncio
-import os
 import random
 from asyncio import Task
 from typing import Dict, List, Optional
 
-from playwright.async_api import (
-    BrowserContext,
-    BrowserType,
-    Page,
-    Playwright,
-    async_playwright,
-)
 from tenacity import RetryError
 
 import config
@@ -39,8 +31,7 @@ from model.m_xiaohongshu import NoteUrlInfo, CreatorUrlInfo
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
 from store import xhs as xhs_store
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
-from var import crawler_type_var, source_keyword_var
+from var import crawler_type_var, reset_xhs_creator_stats_seen, source_keyword_var
 
 from . import media as xhs_media
 from .client import XiaoHongShuClient
@@ -52,14 +43,10 @@ from .exception import (
 )
 from .field import SearchSortType
 from .help import parse_note_info_from_note_url, parse_creator_info_from_url, get_search_id
-from .login import XiaoHongShuLogin
 
 
 class XiaoHongShuCrawler(AbstractCrawler):
-    context_page: Page
     xhs_client: XiaoHongShuClient
-    browser_context: BrowserContext
-    cdp_manager: Optional[CDPBrowserManager]
 
     def __init__(self) -> None:
         if config.XHS_INTERNATIONAL:
@@ -70,73 +57,60 @@ class XiaoHongShuCrawler(AbstractCrawler):
             self.cookie_urls = [self.index_url, "https://edith.xiaohongshu.com"]
         # self.user_agent = utils.get_user_agent()
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-        self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool for automatic proxy refresh
         self._media_downloader: Optional[MediaDownloader] = None
 
+    def _configure_safe_mode(self) -> None:
+        if not config.XHS_SAFE_MODE:
+            return
+        config.MAX_CONCURRENCY_NUM = 1
+        config.ENABLE_GET_COMMENTS = False
+        config.ENABLE_GET_SUB_COMMENTS = False
+        config.ENABLE_GET_MEDIA = False
+        if config.CRAWLER_MAX_PAGES <= 0 or config.CRAWLER_MAX_PAGES > config.XHS_MAX_PAGES:
+            config.CRAWLER_MAX_PAGES = config.XHS_MAX_PAGES
+        config.XHS_CREATOR_ID_LIST = config.XHS_CREATOR_ID_LIST[: config.XHS_MAX_CREATORS_PER_RUN]
+        utils.logger.info(
+            "[XiaoHongShuCrawler] Safe mode enabled: one concurrent request, pages=%s, creators=%s, comments/media disabled",
+            config.CRAWLER_MAX_PAGES,
+            len(config.XHS_CREATOR_ID_LIST),
+        )
+
+    def _request_interval(self) -> float:
+        return random.uniform(
+            config.XHS_REQUEST_INTERVAL_MIN_SEC,
+            config.XHS_REQUEST_INTERVAL_MAX_SEC,
+        )
+
+    async def _wait_between_requests(self, reason: str) -> None:
+        seconds = self._request_interval()
+        await asyncio.sleep(seconds)
+        utils.logger.info("[XiaoHongShuCrawler] Slept %.1fs %s", seconds, reason)
+
     async def start(self) -> None:
-        playwright_proxy_format, httpx_proxy_format = None, None
+        reset_xhs_creator_stats_seen()
+        self._configure_safe_mode()
+        httpx_proxy_format = None
         if config.ENABLE_IP_PROXY:
             self.ip_proxy_pool = await create_ip_pool(config.IP_PROXY_POOL_COUNT, enable_validate_ip=True)
             ip_proxy_info: IpInfoModel = await self.ip_proxy_pool.get_proxy()
-            playwright_proxy_format, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
+            _, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
 
-        async with async_playwright() as playwright:
-            # Choose launch mode based on configuration
-            if config.ENABLE_CDP_MODE:
-                utils.logger.info("[XiaoHongShuCrawler] Launching browser using CDP mode")
-                self.browser_context = await self.launch_browser_with_cdp(
-                    playwright,
-                    playwright_proxy_format,
-                    self.user_agent,
-                    headless=config.CDP_HEADLESS,
-                )
-            else:
-                utils.logger.info("[XiaoHongShuCrawler] Launching browser using standard mode")
-                # Launch a browser context.
-                chromium = playwright.chromium
-                self.browser_context = await self.launch_browser(
-                    chromium,
-                    playwright_proxy_format,
-                    self.user_agent,
-                    headless=config.HEADLESS,
-                )
-                # stealth.min.js is a js script to prevent the website from detecting the crawler.
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
+        if not config.COOKIES.strip():
+            raise RuntimeError("XHS pure API requires a non-empty XHS_COOKIES value")
+        self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
+        if not await self.xhs_client.pong():
+            raise RuntimeError("XHS Cookie is invalid or expired; stop without browser fallback")
 
-            self.context_page = await self.browser_context.new_page()
-            await self.context_page.goto(self.index_url)
+        crawler_type_var.set(config.CRAWLER_TYPE)
+        if config.CRAWLER_TYPE == "search":
+            await self.search()
+        elif config.CRAWLER_TYPE == "detail":
+            await self.get_specified_notes()
+        elif config.CRAWLER_TYPE == "creator":
+            await self.get_creators_and_notes()
 
-            # Create a client to interact with the Xiaohongshu website.
-            self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
-            if not await self.xhs_client.pong():
-                login_obj = XiaoHongShuLogin(
-                    login_type=config.LOGIN_TYPE,
-                    login_phone="",  # input your phone number
-                    browser_context=self.browser_context,
-                    context_page=self.context_page,
-                    cookie_str=config.COOKIES,
-                )
-                await login_obj.begin()
-                await self.xhs_client.update_cookies(
-                    browser_context=self.browser_context,
-                    urls=self.cookie_urls,
-                )
-
-            crawler_type_var.set(config.CRAWLER_TYPE)
-            if config.CRAWLER_TYPE == "search":
-                # Search for notes and retrieve their comment information.
-                await self.search()
-            elif config.CRAWLER_TYPE == "detail":
-                # Get the information and comments of the specified post
-                await self.get_specified_notes()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get creator's information and their notes and comments
-                await self.get_creators_and_notes()
-            else:
-                pass
-
-            utils.logger.info("[XiaoHongShuCrawler.start] Xhs Crawler finished ...")
+        utils.logger.info("[XiaoHongShuCrawler.start] Xhs Crawler finished ...")
 
     async def search(self) -> None:
         """Search for notes and retrieve their comment information."""
@@ -191,8 +165,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                     await self.batch_get_note_comments(note_ids, xsec_tokens)
 
                     # Sleep after each page navigation
-                    await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                    utils.logger.info(f"[XiaoHongShuCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
+                    await self._wait_between_requests(f"after search page {page - 1}")
                 except DataFetchError:
                     utils.logger.error("[XiaoHongShuCrawler.search] Get note detail error")
                     break
@@ -227,7 +200,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 continue
 
             # Use fixed crawling interval
-            crawl_interval = config.CRAWLER_MAX_SLEEP_SEC
+            crawl_interval = self._request_interval()
             # Get all note information of the creator
             all_notes_list = await self.xhs_client.get_all_notes_by_creator(
                 user_id=user_id,
@@ -327,8 +300,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 note_detail.update({"xsec_token": xsec_token, "xsec_source": xsec_source})
 
                 # Sleep after fetching note detail
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-                utils.logger.info(f"[get_note_detail_async_task] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after fetching note {note_id}")
+                await self._wait_between_requests(f"after note {note_id}")
 
                 return note_detail
 
@@ -372,7 +344,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
         async with semaphore:
             utils.logger.info(f"[XiaoHongShuCrawler.get_comments] Begin get note id comments {note_id}")
             # Use fixed crawling interval
-            crawl_interval = config.CRAWLER_MAX_SLEEP_SEC
+            crawl_interval = self._request_interval()
             await self.xhs_client.get_note_all_comments(
                 note_id=note_id,
                 xsec_token=xsec_token,
@@ -382,16 +354,13 @@ class XiaoHongShuCrawler(AbstractCrawler):
             )
 
             # Sleep after fetching comments
-            await asyncio.sleep(crawl_interval)
-            utils.logger.info(f"[XiaoHongShuCrawler.get_comments] Sleeping for {crawl_interval} seconds after fetching comments for note {note_id}")
+            await self._wait_between_requests(f"after comments for note {note_id}")
 
     async def create_xhs_client(self, httpx_proxy: Optional[str]) -> XiaoHongShuClient:
         """Create Xiaohongshu client"""
         utils.logger.info("[XiaoHongShuCrawler.create_xhs_client] Begin create Xiaohongshu API client ...")
-        cookie_str, cookie_dict = await utils.convert_browser_context_cookies(
-            self.browser_context,
-            urls=self.cookie_urls,
-        )
+        cookie_str = config.COOKIES.strip()
+        cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
         xhs_client_obj = XiaoHongShuClient(
             proxy=httpx_proxy,
             headers={
@@ -412,80 +381,14 @@ class XiaoHongShuCrawler(AbstractCrawler):
                 "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
                 "Cookie": cookie_str,
             },
-            playwright_page=self.context_page,
+            playwright_page=None,
             cookie_dict=cookie_dict,
             proxy_ip_pool=self.ip_proxy_pool,  # Pass proxy pool for automatic refresh
         )
         return xhs_client_obj
 
-    async def launch_browser(
-        self,
-        chromium: BrowserType,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """Launch browser and create browser context"""
-        utils.logger.info("[XiaoHongShuCrawler.launch_browser] Begin create browser context ...")
-        if config.SAVE_LOGIN_STATE:
-            # feat issue #14
-            # we will save login state to avoid login every time
-            user_data_dir = os.path.join(os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM)  # type: ignore
-            browser_context = await chromium.launch_persistent_context(
-                user_data_dir=user_data_dir,
-                accept_downloads=True,
-                headless=headless,
-                proxy=playwright_proxy,  # type: ignore
-                viewport={
-                    "width": 1920,
-                    "height": 1080
-                },
-                user_agent=user_agent,
-            )
-            return browser_context
-        else:
-            browser = await chromium.launch(headless=headless, proxy=playwright_proxy)  # type: ignore
-            browser_context = await browser.new_context(viewport={"width": 1920, "height": 1080}, user_agent=user_agent)
-            return browser_context
-
-    async def launch_browser_with_cdp(
-        self,
-        playwright: Playwright,
-        playwright_proxy: Optional[Dict],
-        user_agent: Optional[str],
-        headless: bool = True,
-    ) -> BrowserContext:
-        """Launch browser using CDP mode"""
-        try:
-            self.cdp_manager = CDPBrowserManager()
-            browser_context = await self.cdp_manager.launch_and_connect(
-                playwright=playwright,
-                playwright_proxy=playwright_proxy,
-                user_agent=user_agent,
-                headless=headless,
-            )
-
-            # Display browser information
-            browser_info = await self.cdp_manager.get_browser_info()
-            utils.logger.info(f"[XiaoHongShuCrawler] CDP browser info: {browser_info}")
-
-            return browser_context
-
-        except Exception as e:
-            utils.logger.error(f"[XiaoHongShuCrawler] CDP mode launch failed, falling back to standard mode: {e}")
-            # Fall back to standard mode
-            chromium = playwright.chromium
-            return await self.launch_browser(chromium, playwright_proxy, user_agent, headless)
-
-    async def close(self):
-        """Close browser context"""
-        # Special handling if using CDP mode
-        if self.cdp_manager:
-            await self.cdp_manager.cleanup()
-            self.cdp_manager = None
-        else:
-            await self.browser_context.close()
-        utils.logger.info("[XiaoHongShuCrawler.close] Browser context closed ...")
+    async def launch_browser(self, *args, **kwargs):
+        raise RuntimeError("XHS crawler uses pure API and does not launch a browser")
 
     async def download_media(self, note_detail: Dict) -> None:
         """下载笔记的媒体资源（封面、视频或图文图片）

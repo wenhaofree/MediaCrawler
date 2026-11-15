@@ -2,6 +2,8 @@
 #
 # This file is part of MediaCrawler project.
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 import config
@@ -22,6 +24,14 @@ class DummyLoop:
 class FakeBrowserContext:
     async def cookies(self):
         return []
+
+
+class FakeCookieBrowserContext(FakeBrowserContext):
+    def __init__(self):
+        self.added_cookies = []
+
+    async def add_cookies(self, cookies):
+        self.added_cookies.extend(cookies)
 
 
 class FakeBrowserContextWithUrls:
@@ -120,6 +130,44 @@ async def test_xhs_login_ui_marker_detects_existing_login():
 
 
 @pytest.mark.asyncio
+async def test_xhs_cookie_login_loads_the_complete_cookie_jar():
+    browser_context = FakeCookieBrowserContext()
+    login = XiaoHongShuLogin(
+        login_type="cookie",
+        browser_context=browser_context,
+        context_page=FakePage(),
+        cookie_str="a1=value-a1; web_session=value-session; webId=value-webid",
+    )
+
+    await login.login_by_cookies()
+
+    assert {cookie["name"] for cookie in browser_context.added_cookies} == {
+        "a1", "web_session", "webId"
+    }
+    assert {cookie["domain"] for cookie in browser_context.added_cookies} == {".xiaohongshu.com"}
+
+
+def test_xhs_safe_mode_limits_request_scope(monkeypatch):
+    crawler = XiaoHongShuCrawler()
+    monkeypatch.setattr(config, "XHS_SAFE_MODE", True)
+    monkeypatch.setattr(config, "XHS_MAX_PAGES", 1)
+    monkeypatch.setattr(config, "XHS_MAX_CREATORS_PER_RUN", 1)
+    monkeypatch.setattr(config, "CRAWLER_MAX_PAGES", 0)
+    monkeypatch.setattr(config, "MAX_CONCURRENCY_NUM", 8)
+    monkeypatch.setattr(config, "ENABLE_GET_COMMENTS", True)
+    monkeypatch.setattr(config, "ENABLE_GET_MEDIA", True)
+    monkeypatch.setattr(config, "XHS_CREATOR_ID_LIST", ["first", "second"])
+
+    crawler._configure_safe_mode()
+
+    assert config.CRAWLER_MAX_PAGES == 1
+    assert config.MAX_CONCURRENCY_NUM == 1
+    assert config.ENABLE_GET_COMMENTS is False
+    assert config.ENABLE_GET_MEDIA is False
+    assert config.XHS_CREATOR_ID_LIST == ["first"]
+
+
+@pytest.mark.asyncio
 async def test_xhs_qrcode_login_opens_dialog_with_stable_login_button(monkeypatch):
     page = FakePage(
         visible_selectors={
@@ -187,24 +235,36 @@ async def test_xhs_update_cookies_only_reads_xhs_domains():
 
 
 @pytest.mark.asyncio
-async def test_xhs_create_client_only_reads_xhs_domain_cookies():
+async def test_xhs_create_client_uses_configured_cookie_without_browser(monkeypatch):
     crawler = XiaoHongShuCrawler()
-    crawler.context_page = FakePage()
-    crawler.browser_context = FakeBrowserContextWithUrls(
-        [
-            {"name": "a1", "value": "cookie-a1"},
-            {"name": "web_session", "value": "cookie-session"},
-        ]
-    )
     crawler.ip_proxy_pool = None
+    monkeypatch.setattr(config, "COOKIES", "a1=cookie-a1; web_session=cookie-session")
 
     client = await crawler.create_xhs_client(httpx_proxy=None)
 
-    assert crawler.browser_context.requested_urls == [
-        "https://www.xiaohongshu.com",
-        "https://edith.xiaohongshu.com",
-    ]
-    assert client.headers["Cookie"] == "a1=cookie-a1;web_session=cookie-session"
+    assert client.headers["Cookie"] == "a1=cookie-a1; web_session=cookie-session"
+    assert client.cookie_dict == {"a1": "cookie-a1", "web_session": "cookie-session"}
+    assert client.playwright_page is None
+
+
+@pytest.mark.asyncio
+async def test_xhs_start_uses_pure_api_without_browser(monkeypatch):
+    crawler = XiaoHongShuCrawler()
+    client = type("Client", (), {"pong": AsyncMock(return_value=True)})()
+    collect_creators = AsyncMock()
+
+    monkeypatch.setattr(config, "COOKIES", "a1=cookie-a1")
+    monkeypatch.setattr(config, "CRAWLER_TYPE", "creator")
+    monkeypatch.setattr(config, "XHS_SAFE_MODE", False)
+    monkeypatch.setattr(crawler, "create_xhs_client", AsyncMock(return_value=client))
+    monkeypatch.setattr(crawler, "get_creators_and_notes", collect_creators)
+
+    await crawler.start()
+
+    crawler.create_xhs_client.assert_awaited_once_with(None)
+    client.pong.assert_awaited_once()
+    collect_creators.assert_awaited_once()
+    assert not hasattr(crawler, "browser_context")
 
 
 def test_xhs_extractor_reads_creator_notes_from_html_snapshot():

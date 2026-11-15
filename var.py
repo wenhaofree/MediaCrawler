@@ -54,3 +54,23 @@ def should_write_bili_creator_stats(user_id: str) -> bool:
         return False
     seen.add(user_id)
     return True
+
+
+xhs_creator_stats_seen_var: ContextVar[Optional[Set[str]]] = ContextVar(
+    "xhs_creator_stats_seen", default=None
+)
+
+
+def reset_xhs_creator_stats_seen() -> None:
+    xhs_creator_stats_seen_var.set(set())
+
+
+def should_write_xhs_creator_stats(user_id: str) -> bool:
+    seen = xhs_creator_stats_seen_var.get()
+    if seen is None:
+        seen = set()
+        xhs_creator_stats_seen_var.set(seen)
+    if user_id in seen:
+        return False
+    seen.add(user_id)
+    return True

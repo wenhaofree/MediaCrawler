@@ -11,12 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import aiosqlite
 import httpx
-from playwright.async_api import async_playwright
 
 import config
 from api.schemas import (
@@ -30,10 +29,8 @@ from api.schemas import (
 from config import db_config
 from media_platform.bilibili.help import parse_creator_info_from_url as parse_bili_creator
 from media_platform.douyin.help import parse_creator_info_from_url as parse_douyin_creator
-from media_platform.xhs.extractor import XiaoHongShuExtractor
 from media_platform.xhs.help import parse_creator_info_from_url as parse_xhs_creator
 from tools import utils
-from tools.cdp_browser import CDPBrowserManager
 
 from ..services import crawler_manager
 
@@ -1150,35 +1147,7 @@ class ScheduledTaskService:
         pages_fetched = 0
         items_before = await self._count_creator_items(task["platform"], creator)
 
-        if task["platform"] == "xhs":
-            refresh_result = await self._prepare_xhs_creator_for_run(creator)
-            if refresh_result["status"] == "failed":
-                result = {
-                    "status": "failed",
-                    "error_message": refresh_result["error_message"],
-                    "items_fetched": 0,
-                    "pages_fetched": 0,
-                    "effective_creator_arg": "",
-                    "normalized_creator_id": creator["normalized_creator_id"],
-                }
-                await self._persist_run_item(
-                    run_id=run_id,
-                    task_id=task["id"],
-                    creator=creator,
-                    started_at=started_at,
-                    finished_at=_now_iso(),
-                    result=result,
-                )
-                await self._update_creator_outcome(
-                    creator_id=creator["id"],
-                    success=False,
-                    error_message=refresh_result["error_message"],
-                )
-                return result
-            effective_creator_arg = refresh_result["effective_creator_arg"]
-            forced_partial = refresh_result["partial"]
-            preflight_error = refresh_result["error_message"]
-        else:
+        if task["platform"] != "xhs":
             effective_creator_arg = creator["normalized_creator_id"]
 
         while crawler_manager.process and crawler_manager.process.poll() is None:
@@ -1187,18 +1156,18 @@ class ScheduledTaskService:
         save_option = SaveDataOptionEnum(task["save_option"])
         # Douyin analytics slots use lifecycle filtering; other platforms keep manual.
         slot = scheduled_slot if task["platform"] == "dy" else "manual"
-        use_pure_api = _scheduled_crawl_use_pure_api()
+        use_pure_api = task["platform"] == "xhs" or _scheduled_crawl_use_pure_api()
         request = CrawlerStartRequest(
             platform=PlatformEnum(task["platform"]),
-            login_type=LoginTypeEnum.QRCODE,
+            login_type=LoginTypeEnum.COOKIE if task["platform"] == "xhs" else LoginTypeEnum.QRCODE,
             crawler_type=CrawlerTypeEnum.CREATOR,
             creator_ids=effective_creator_arg,
             enable_comments=task["enable_comments"],
             enable_sub_comments=task["enable_sub_comments"],
             save_option=save_option,
-            headless=False,
+            headless=task["platform"] == "xhs",
             max_pages=task["max_pages"],
-            cdp_attach_only=not use_pure_api,
+            cdp_attach_only=task["platform"] != "xhs" and not use_pure_api,
             pure_api=use_pure_api,
             scheduled_slot=slot,
         )
@@ -1319,156 +1288,5 @@ class ScheduledTaskService:
                 (creator_value,),
             )
             return int(row["total"]) if row else 0
-
-    async def _prepare_xhs_creator_for_run(self, creator: dict[str, Any]) -> dict[str, Any]:
-        user_id = creator["xhs_user_id"] or creator["normalized_creator_id"]
-        token = creator["xhs_xsec_token"]
-        source = creator["xhs_xsec_source"] or "pc_search"
-
-        try:
-            refresh = await self._refresh_xhs_creator_token(
-                user_id=user_id,
-                xsec_token=token,
-                xsec_source=source,
-            )
-        except Exception as exc:
-            return {
-                "status": "failed",
-                "effective_creator_arg": "",
-                "partial": False,
-                "error_message": f"Failed to refresh xhs token: {exc}",
-            }
-
-        if refresh["token"]:
-            await self._update_xhs_creator_token(
-                creator_id=creator["id"],
-                user_id=user_id,
-                xsec_token=refresh["token"],
-                xsec_source=refresh["source"],
-            )
-            return {
-                "status": "success",
-                "effective_creator_arg": self._build_xhs_creator_url(
-                    user_id=user_id,
-                    xsec_token=refresh["token"],
-                    xsec_source=refresh["source"],
-                ),
-                "partial": False,
-                "error_message": "",
-            }
-
-        if refresh["html_available"]:
-            return {
-                "status": "success",
-                "effective_creator_arg": user_id,
-                "partial": True,
-                "error_message": "xsec_token refresh failed, fallback to HTML first-page crawl",
-            }
-
-        return {
-            "status": "failed",
-            "effective_creator_arg": "",
-            "partial": False,
-            "error_message": "xsec_token refresh failed and creator HTML could not be parsed",
-        }
-
-    async def _update_xhs_creator_token(
-        self,
-        creator_id: int,
-        user_id: str,
-        xsec_token: str,
-        xsec_source: str,
-    ) -> None:
-        async with _get_connection() as db:
-            await db.execute(
-                """
-                UPDATE scheduled_crawl_task_creator
-                SET xhs_user_id = ?, xhs_xsec_token = ?, xhs_xsec_source = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (user_id, xsec_token, xsec_source, _now_iso(), creator_id),
-            )
-
-    def _build_xhs_creator_url(
-        self,
-        user_id: str,
-        xsec_token: str,
-        xsec_source: str,
-    ) -> str:
-        query = urlencode(
-            {
-                "xsec_token": xsec_token,
-                "xsec_source": xsec_source or "pc_search",
-            }
-        )
-        return f"https://www.xiaohongshu.com/user/profile/{user_id}?{query}"
-
-    async def _refresh_xhs_creator_token(
-        self,
-        user_id: str,
-        xsec_token: str,
-        xsec_source: str,
-    ) -> dict[str, Any]:
-        captured: dict[str, str] = {"token": "", "source": xsec_source or "pc_search"}
-        extractor = XiaoHongShuExtractor()
-        html_available = False
-
-        async with async_playwright() as playwright:
-            cdp_manager = CDPBrowserManager()
-            browser_context = await cdp_manager.launch_and_connect(
-                playwright,
-                user_agent=None,
-                headless=False,
-                attach_only=True,
-            )
-            page = await browser_context.new_page()
-
-            def on_request(request: Any) -> None:
-                if "/api/sns/web/v1/user_posted" not in request.url:
-                    return
-                parsed = urlparse(request.url)
-                params = parse_qs(parsed.query)
-                if params.get("user_id", [""])[0] != user_id:
-                    return
-                captured["token"] = params.get("xsec_token", [""])[0]
-                captured["source"] = params.get("xsec_source", ["pc_search"])[0]
-
-            page.on("request", on_request)
-            target_url = f"https://www.xiaohongshu.com/user/profile/{user_id}"
-            if xsec_token:
-                target_url = self._build_xhs_creator_url(
-                    user_id=user_id,
-                    xsec_token=xsec_token,
-                    xsec_source=xsec_source or "pc_search",
-                )
-            try:
-                await page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
-                await page.wait_for_load_state("networkidle", timeout=5000)
-            except Exception:
-                pass
-
-            await asyncio.sleep(2)
-            html = await page.content()
-            html_available = bool(
-                extractor.extract_creator_notes_from_html(
-                    html, xsec_source=captured["source"]
-                )
-            )
-
-            if not captured["token"]:
-                page_params = parse_qs(urlparse(page.url).query)
-                captured["token"] = page_params.get("xsec_token", [""])[0]
-                if page_params.get("xsec_source", [""])[0]:
-                    captured["source"] = page_params.get("xsec_source", [""])[0]
-
-            await page.close()
-            await cdp_manager.cleanup(force=True)
-
-        return {
-            "token": captured["token"],
-            "source": captured["source"] or "pc_search",
-            "html_available": html_available,
-        }
-
 
 scheduled_task_service = ScheduledTaskService()

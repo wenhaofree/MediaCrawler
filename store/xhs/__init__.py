@@ -21,7 +21,7 @@
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/1/14 17:34
 # @Desc    :
-from typing import List
+from typing import Dict, List
 
 import config
 from media_platform.xhs.media import extract_image_urls, extract_video_urls
@@ -155,5 +155,20 @@ async def save_creator(user_id: str, creator: Dict):
     Returns:
 
     """
-    # 教学版：创作者个人资料(昵称/性别/头像/IP/粉丝数等)不再落库，防骚扰。
-    return
+    profile = creator.get("basic_info") or creator.get("basicInfo") or creator
+    avatar = profile.get("image") or profile.get("avatar") or profile.get("images") or ""
+    if isinstance(avatar, list):
+        avatar = avatar[0] if avatar else ""
+    local_db_item = {
+        "user_id": user_id,
+        "nickname": profile.get("nickname", ""),
+        "avatar": avatar,
+        "ip_location": profile.get("ip_location", ""),
+        "desc": profile.get("desc", ""),
+        "gender": profile.get("gender", ""),
+        "follows": str(profile.get("follows", "")),
+        "fans": str(profile.get("fans", "")),
+        "interaction": str(profile.get("interaction", "")),
+        "tag_list": ",".join(profile.get("tags", [])) if isinstance(profile.get("tags"), list) else "",
+    }
+    await XhsStoreFactory.create_store().store_creator(local_db_item)

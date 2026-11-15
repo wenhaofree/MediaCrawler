@@ -168,6 +168,51 @@ async def test_scheduled_task_run_executes_creators_sequentially_and_keeps_parti
 
 
 @pytest.mark.asyncio
+async def test_xhs_scheduled_task_uses_pure_api_without_cdp(tmp_path, monkeypatch):
+    service = await _build_service(tmp_path, monkeypatch)
+    task = await service.create_task(
+        ScheduledTaskUpsertRequest(
+            name="小红书纯 API 日采",
+            platform=PlatformEnum.XHS,
+            run_time="09:00",
+            max_pages=1,
+            save_option=SaveDataOptionEnum.SQLITE,
+            status="paused",
+            creators=[
+                "https://www.xiaohongshu.com/user/profile/640c29eb000000001001c91b?xsec_token=tokenA&xsec_source=pc_search"
+            ],
+        )
+    )
+    requests = []
+
+    async def fake_start(request):
+        requests.append(request)
+        return True
+
+    async def fake_count_creator_items(_platform, _creator):
+        return 0
+
+    async def fake_wait():
+        return 0
+
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.start", fake_start)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.wait", fake_wait)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.process", None)
+    monkeypatch.setattr(service, "_count_creator_items", fake_count_creator_items)
+
+    await service._execute_task_run(task["id"], "manual")
+
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.pure_api is True
+    assert request.cdp_attach_only is False
+    assert request.login_type.value == "cookie"
+    assert request.creator_ids == task["creators"][0]["raw_input"]
+
+    await service.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_delete_task_removes_queued_run_requests(tmp_path, monkeypatch):
     service = await _build_service(tmp_path, monkeypatch)
     payload = ScheduledTaskUpsertRequest(

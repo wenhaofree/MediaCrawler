@@ -88,6 +88,45 @@ services:
     networks:
       - wenhao-services
 
+  # 小红书采集服务（容器名以 -xhs 区分；纯 HTTP API，无 Chromium）
+  mediacrawler-xhs:
+    image: mediacrawler-xhs:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.xhs
+    container_name: mediacrawler-xhs
+    restart: unless-stopped
+    ports:
+      - "${XHS_APP_PORT:-8087}:8080"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_DB_USER:-postgres}:${POSTGRES_DB_PWD:-fuwenhao}@wenhao-postgres:5432/${POSTGRES_DB_NAME:-media_crawler}
+      POSTGRES_DB_HOST: wenhao-postgres
+      POSTGRES_DB_PORT: 5432
+      POSTGRES_DB_USER: ${POSTGRES_DB_USER:-postgres}
+      POSTGRES_DB_PWD: ${POSTGRES_DB_PWD:-fuwenhao}
+      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-media_crawler}
+      SAVE_DATA_OPTION: postgres
+      AUTO_INIT_DB: "true"
+      TZ: Asia/Shanghai
+      SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      CRAWLER_PLATFORM: xhs
+      CRAWLER_COOKIES: "${XHS_COOKIES:-}"
+      XHS_CREATOR_IDS: "${XHS_CREATOR_IDS:-}"
+      CRAWLER_LOGIN_TYPE: cookie
+      ENABLE_PURE_API_MODE: "true"
+      XHS_SAFE_MODE: "true"
+      XHS_MAX_PAGES: "1"
+      XHS_MAX_CREATORS_PER_RUN: "1"
+      XHS_REQUEST_INTERVAL_MIN_SEC: "8"
+      XHS_REQUEST_INTERVAL_MAX_SEC: "15"
+      AUTO_SEED_DY_SCHEDULE: "false"
+    volumes:
+      - ./data/xhs:/app/data
+      - ./.env:/app/.env:ro
+      - ./config/base_config.py:/app/config/base_config.py:ro
+    networks:
+      - wenhao-services
+
 # 声明引用宿主机已存在的外部 Docker 网络
 networks:
   wenhao-services:

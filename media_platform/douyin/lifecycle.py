@@ -42,6 +42,13 @@ def parse_count(value) -> Optional[int]:
     text = str(value).strip().replace(",", "")
     if not text or text.lower() in {"none", "null"}:
         return None
+    compact = text.lower().replace("+", "")
+    for suffix, multiplier in (("万", 10_000), ("亿", 100_000_000), ("w", 10_000), ("k", 1_000)):
+        if compact.endswith(suffix):
+            try:
+                return int(float(compact[: -len(suffix)]) * multiplier)
+            except ValueError:
+                return None
     try:
         return int(float(text))
     except ValueError:

@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 from urllib.parse import quote, urlencode
 
 import httpx
-from playwright.async_api import BrowserContext, Page
 from tenacity import (
     RetryError,
     retry,
@@ -61,7 +60,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         proxy=None,
         *,
         headers: Dict[str, str],
-        playwright_page: Page,
+        playwright_page: Any = None,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
     ):
@@ -280,7 +279,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         utils.logger.info(f"[XiaoHongShuClient.pong] Login state result: {ping_flag}")
         return ping_flag
 
-    async def update_cookies(self, browser_context: BrowserContext, urls: Optional[list[str]] = None):
+    async def update_cookies(self, browser_context: Any, urls: Optional[list[str]] = None):
         """
         Update cookies method provided by API client, usually called after successful login
         Args:

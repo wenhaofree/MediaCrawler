@@ -184,6 +184,9 @@ PLATFORM = os.getenv("CRAWLER_PLATFORM", PLATFORM)
 COOKIES = os.getenv("CRAWLER_COOKIES", COOKIES)
 CRAWLER_TYPE = os.getenv("CRAWLER_TYPE", CRAWLER_TYPE)
 SAVE_DATA_OPTION = os.getenv("SAVE_DATA_OPTION", SAVE_DATA_OPTION)
+LOGIN_TYPE = os.getenv("CRAWLER_LOGIN_TYPE", LOGIN_TYPE)
+HEADLESS = os.getenv("HEADLESS", str(HEADLESS)).strip().lower() in {"1", "true", "yes", "on"}
+ENABLE_CDP_MODE = os.getenv("ENABLE_CDP_MODE", str(ENABLE_CDP_MODE)).strip().lower() in {"1", "true", "yes", "on"}
 ENABLE_PURE_API_MODE = os.getenv(
     "ENABLE_PURE_API_MODE", str(ENABLE_PURE_API_MODE)
 ).strip().lower() in {"1", "true", "yes", "on"}

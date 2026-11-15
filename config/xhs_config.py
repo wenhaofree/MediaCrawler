@@ -18,6 +18,19 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 
+import os
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_number(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, default))
+    except ValueError:
+        return default
+
 # Xiaohongshu platform configuration
 
 # Sorting method, the specific enumeration value is in media_platform/xhs/field.py
@@ -32,6 +45,16 @@ XHS_SPECIFIED_NOTE_URL_LIST = [
 # Specify the creator URL list, which needs to carry xsec_token and xsec_source parameters.
 
 XHS_CREATOR_ID_LIST = [
-    "https://www.xiaohongshu.com/user/profile/5f58bd990000000001003753?xsec_token=ABYVg1evluJZZzpMX-VWzchxQ1qSNVW3r-jOEnKqMcgZw=&xsec_source=pc_search"
-    # ........................
+    item.strip() for item in os.getenv("XHS_CREATOR_IDS", "").split(",") if item.strip()
 ]
+
+# Cookie accounts use conservative defaults: one profile page, one request at a time,
+# and irregular pauses. Turn this off only after reviewing the platform's rules.
+XHS_SAFE_MODE = _env_flag("XHS_SAFE_MODE", True)
+XHS_MAX_PAGES = max(1, int(_env_number("XHS_MAX_PAGES", 1)))
+XHS_MAX_CREATORS_PER_RUN = max(1, int(_env_number("XHS_MAX_CREATORS_PER_RUN", 1)))
+XHS_REQUEST_INTERVAL_MIN_SEC = max(1.0, _env_number("XHS_REQUEST_INTERVAL_MIN_SEC", 8.0))
+XHS_REQUEST_INTERVAL_MAX_SEC = max(
+    XHS_REQUEST_INTERVAL_MIN_SEC,
+    _env_number("XHS_REQUEST_INTERVAL_MAX_SEC", 15.0),
+)

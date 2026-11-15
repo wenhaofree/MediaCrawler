@@ -30,12 +30,13 @@ from sqlalchemy.orm import Session
 
 from base.base_crawler import AbstractStore
 from database.db_session import get_session
-from database.models import XhsNote, XhsNoteComment
+from database.models import XhsCreator, XhsCreatorStats, XhsNote, XhsNoteComment, XhsNoteStats
 
 from tools.async_file_writer import AsyncFileWriter
 from tools.time_util import get_current_timestamp
-from var import crawler_type_var
+from var import crawler_type_var, should_write_xhs_creator_stats
 from database.mongodb_store_base import MongoDBStoreBase
+from media_platform.douyin.lifecycle import collected_at_iso, parse_count, resolve_scheduled_slot
 from tools import utils
 from store.excel_store_base import ExcelStoreBase
 
@@ -132,6 +133,18 @@ class XhsDbStoreImplement(AbstractStore):
                 await self.update_content(session, content_item)
             else:
                 await self.add_content(session, content_item)
+            session.add(
+                XhsNoteStats(
+                    note_id=str(note_id),
+                    liked_count=parse_count(content_item.get("liked_count")),
+                    collected_count=parse_count(content_item.get("collected_count")),
+                    comment_count=parse_count(content_item.get("comment_count")),
+                    share_count=parse_count(content_item.get("share_count")),
+                    collected_at=collected_at_iso(),
+                    scheduled_slot=resolve_scheduled_slot(),
+                    source_type=crawler_type_var.get() or "detail",
+                )
+            )
 
     async def add_content(self, session: AsyncSession, content_item: Dict):
         add_ts = int(get_current_timestamp())
@@ -243,8 +256,36 @@ class XhsDbStoreImplement(AbstractStore):
         return result.first() is not None
 
     async def store_creator(self, creator_item: Dict):
-        # 教学版：创作者个人资料不再落库
-        pass
+        user_id = str(creator_item.get("user_id") or "").strip()
+        if not user_id:
+            return
+
+        creator = dict(creator_item)
+        creator["user_id"] = user_id
+        async with get_session() as session:
+            result = await session.execute(select(XhsCreator).where(XhsCreator.user_id == user_id))
+            existing = result.scalars().first()
+            if existing:
+                for field, value in creator.items():
+                    if hasattr(existing, field):
+                        setattr(existing, field, value)
+                existing.last_modify_ts = int(get_current_timestamp())
+            else:
+                now = int(get_current_timestamp())
+                session.add(XhsCreator(add_ts=now, last_modify_ts=now, **creator))
+
+            if should_write_xhs_creator_stats(user_id):
+                session.add(
+                    XhsCreatorStats(
+                        user_id=user_id,
+                        follower_count=parse_count(creator.get("fans")),
+                        following_count=parse_count(creator.get("follows")),
+                        interaction_count=parse_count(creator.get("interaction")),
+                        collected_at=collected_at_iso(),
+                        scheduled_slot=resolve_scheduled_slot(),
+                        source_type=crawler_type_var.get() or "creator",
+                    )
+                )
 
     async def get_all_content(self) -> List[Dict]:
         async with get_session() as session:

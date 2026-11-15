@@ -91,11 +91,11 @@
 
           <label class="field">
             <span>作者列表</span>
-            <textarea id="task-creators" rows="10" placeholder="每行一个作者。小红书可填完整 creator URL 或 user_id，其余平台按各自 creator_id / URL Token 填写。"></textarea>
+            <textarea id="task-creators" rows="10" placeholder="每行一个作者。小红书必须填写带 xsec_token 的完整主页 URL，其余平台按各自 creator_id / URL Token 填写。"></textarea>
           </label>
 
           <div class="field-hint">
-            小红书任务会在每次执行前自动使用 9222 浏览器刷新 <code>xsec_token</code>。所有任务都强制附着 9222 浏览器，不会新开浏览器。
+            小红书任务使用纯 HTTP API，不会启动或附着浏览器；请在保存前更新带 <code>xsec_token</code> 的完整主页 URL。其他平台按各自的纯 API/CDP 配置执行。
           </div>
 
           <div id="form-error" class="state state--error hidden"></div>

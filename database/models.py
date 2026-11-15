@@ -497,6 +497,40 @@ class XhsCreator(Base):
     interaction = Column(Text, comment='互动数')
     tag_list = Column(Text, comment='标签列表')
 
+
+class XhsCreatorStats(Base):
+    """Append-only public Xiaohongshu creator snapshots for growth trends."""
+    __tablename__ = 'xhs_creator_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    user_id = Column(String(255), nullable=False, index=True, comment='创作者ID')
+    follower_count = Column(BigInteger, comment='粉丝数')
+    following_count = Column(BigInteger, comment='关注数')
+    interaction_count = Column(BigInteger, comment='互动数')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段')
+    source_type = Column(String(32), default='creator', comment='采集类型')
+    __table_args__ = (
+        Index('idx_xhs_creator_stats_user_collected', 'user_id', 'collected_at'),
+    )
+
+
+class XhsNoteStats(Base):
+    """Append-only Xiaohongshu note engagement snapshots for trend charts."""
+    __tablename__ = 'xhs_note_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    note_id = Column(String(255), nullable=False, index=True, comment='笔记ID')
+    liked_count = Column(BigInteger, comment='点赞数')
+    collected_count = Column(BigInteger, comment='收藏数')
+    comment_count = Column(BigInteger, comment='评论数')
+    share_count = Column(BigInteger, comment='分享数')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段')
+    source_type = Column(String(32), default='detail', comment='采集类型')
+    __table_args__ = (
+        Index('idx_xhs_note_stats_note_collected', 'note_id', 'collected_at'),
+    )
+
+
 class TiebaNote(Base):
     __tablename__ = 'tieba_note'
     id = Column(Integer, primary_key=True, comment='主键ID')
