@@ -21,6 +21,7 @@ from .data import router as data_router
 from .websocket import router as websocket_router
 from .douyin import router as douyin_router
 from .bilibili import router as bilibili_router
+from .xhs import router as xhs_router
 
 __all__ = [
     "crawler_router",
@@ -28,4 +29,5 @@ __all__ = [
     "websocket_router",
     "douyin_router",
     "bilibili_router",
+    "xhs_router",
 ]

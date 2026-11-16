@@ -123,6 +123,7 @@ services:
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
       CRAWLER_PLATFORM: xhs
       CRAWLER_COOKIES: "${XHS_COOKIES:-}"
+      XHS_COOKIES: "${XHS_COOKIES:-}"
       XHS_CREATOR_IDS: "${XHS_CREATOR_IDS:-}"
       CRAWLER_LOGIN_TYPE: cookie
       ENABLE_PURE_API_MODE: "true"

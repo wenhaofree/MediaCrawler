@@ -33,6 +33,9 @@ def _env_number(name: str, default: float) -> float:
 
 # Xiaohongshu platform configuration
 
+# 小红书 Cookie（优先读 .env 的 XHS_COOKIES；Docker 的 mediacrawler-xhs 也会注入为 CRAWLER_COOKIES）
+XHS_COOKIES = (os.getenv("XHS_COOKIES") or "").strip()
+
 # Sorting method, the specific enumeration value is in media_platform/xhs/field.py
 SORT_TYPE = "popularity_descending"
 
