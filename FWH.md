@@ -181,6 +181,47 @@ curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
 
 阅读量接口使用的是微信读书 Web 会话；`WEREAD_WEB_COOKIE` 与 `weread-omni` 保存的手机端登录会话独立，无法互相刷新。Cookie 失效后只需安全地更新宿主机 `.env` 中的 `WEREAD_WEB_COOKIE`，程序会在下一次阅读量请求时重新读取，无需重启容器。建议将账号资料采集与阅读量采集分开：资料添加使用 `fetch_articles=false`，阅读量由每天一次的定时任务执行；出现“登录超时”时暂停任务、重新在本人已登录的微信读书 Web 会话中取得 Cookie，避免连续重试。
 
+### 服务器 Docker：weread-omni 与 Cookie 稳定运行
+
+`mediacrawler-gzh` 不是调用远端 HTTP 服务，而是在容器内执行 `weread-omni` CLI。服务器把已构建的 CLI 目录只读挂载到 `/opt/weread-omni`，因此先在服务器准备并固定一个可回滚的版本：
+
+```bash
+git clone <你的 weread-omni 仓库地址> /opt/weread-omni
+cd /opt/weread-omni
+npm ci --ignore-scripts
+npm run build
+```
+
+服务器项目 `.env`：
+
+```dotenv
+WEREAD_OMNI_HOST_PATH=/opt/weread-omni
+WEREAD_OMNI_CLI=/opt/weread-omni/bin/weread-omni.js
+WEREAD_CONFIG_HOST_PATH=./data/weread-config
+WEREAD_SECRET_DIR_HOST=./secrets
+WEREAD_WEB_COOKIE_FILE=/run/secrets/weread_web_cookie
+```
+
+启动后，先在容器中完成一次手机端 CLI 登录；会话保存在 `./data/weread-config`，容器重建后仍可使用：
+
+```bash
+docker compose up -d --build mediacrawler-gzh
+docker exec -it mediacrawler-gzh node /opt/weread-omni/bin/weread-omni.js login --json
+docker exec -it mediacrawler-gzh node /opt/weread-omni/bin/weread-omni.js \
+  public-accounts articles MP_WXS_3913422171 --count 1 --json
+```
+
+阅读量 Web Cookie 使用单独文件，避免出现在 Compose 环境变量、cURL 历史和日志中。创建 `./secrets` 后将 Cookie 写入临时文件并替换；目录挂载会让容器在下一次请求时读取新内容，无需重启：
+
+```bash
+mkdir -p ./secrets
+umask 077
+printf '%s' '从本人微信读书 Web 会话取得的完整 Cookie' > ./secrets/weread_web_cookie.next
+mv ./secrets/weread_web_cookie.next ./secrets/weread_web_cookie
+```
+
+移动端登录会话不能自动换取 Web Cookie；出现“登录超时”时应暂停阅读量任务、更新该文件后再恢复，切勿做高频重试。
+
 ```bash
 docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
   psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \

@@ -113,15 +113,29 @@ def _strip_cookie(value: Optional[str]) -> str:
     return text
 
 
+def _read_cookie_file(path: str) -> str:
+    if not path:
+        return ""
+    cookie_path = Path(path)
+    if not cookie_path.is_file():
+        return ""
+    try:
+        return _strip_cookie(cookie_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        utils.logger.warning("[WereadOmniBridge] cannot read cookie file %s: %s", path, exc)
+        return ""
+
+
 def resolve_web_cookie(cookie: Optional[str] = None) -> str:
     """
     Resolve WeRead web cookie for article-stats.
 
     Priority (runtime env first, so updating .env / export works without stale config):
     1) request body cookie
-    2) WEREAD_WEB_COOKIE (same var as weread-omni CLI)
-    3) GZH_WEB_COOKIE
-    4) config.GZH_WEB_COOKIE / config fallbacks
+    2) WEREAD_WEB_COOKIE_FILE (re-read for each request, for Docker secret mounts)
+    3) WEREAD_WEB_COOKIE (same var as weread-omni CLI)
+    4) GZH_WEB_COOKIE
+    5) config.GZH_WEB_COOKIE / config fallbacks
     """
     try:
         from dotenv import load_dotenv, find_dotenv
@@ -135,6 +149,7 @@ def resolve_web_cookie(cookie: Optional[str] = None) -> str:
 
     return (
         _strip_cookie(cookie)
+        or _read_cookie_file(os.getenv("WEREAD_WEB_COOKIE_FILE", "").strip())
         or _strip_cookie(os.getenv("WEREAD_WEB_COOKIE"))
         or _strip_cookie(os.getenv("GZH_WEB_COOKIE"))
         or _strip_cookie(getattr(config, "GZH_WEB_COOKIE", None))

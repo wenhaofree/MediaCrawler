@@ -169,6 +169,7 @@ services:
       CRAWLER_TYPE: creator
       ENABLE_PURE_API_MODE: "true"
       WEREAD_OMNI_CLI: "${WEREAD_OMNI_CLI:-/opt/weread-omni/bin/weread-omni.js}"
+      WEREAD_WEB_COOKIE_FILE: "${WEREAD_WEB_COOKIE_FILE:-/run/secrets/weread_web_cookie}"
       WEREAD_WEB_COOKIE: "${WEREAD_WEB_COOKIE:-}"
       GZH_WEB_COOKIE: "${GZH_WEB_COOKIE:-}"
       GZH_ACCOUNT_IDS: "${GZH_ACCOUNT_IDS:-}"
@@ -187,6 +188,8 @@ services:
       - ./config/base_config.py:/app/config/base_config.py:ro
       # Host-built weread-omni (npm ci && npm run build)
       - ${WEREAD_OMNI_HOST_PATH:-/opt/weread-omni}:/opt/weread-omni:ro
+      # Rotate weread_web_cookie atomically on the host; the app re-reads it per stats request.
+      - ${WEREAD_SECRET_DIR_HOST:-./secrets}:/run/secrets:ro
       # Persist WeRead mobile login session (login once on host or via docker exec)
       - ${WEREAD_CONFIG_HOST_PATH:-./data/weread-config}:/root/.config/weread
     networks:

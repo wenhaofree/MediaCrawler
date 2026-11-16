@@ -29,6 +29,20 @@ def test_resolve_web_cookie_priority(monkeypatch):
     assert weread_cli.resolve_web_cookie("from-request") == "from-request"
 
 
+def test_resolve_web_cookie_reloads_secret_file(monkeypatch, tmp_path):
+    import dotenv
+
+    cookie_file = tmp_path / "weread_web_cookie"
+    cookie_file.write_text("wr_skey=first", encoding="utf-8")
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.setenv("WEREAD_WEB_COOKIE_FILE", str(cookie_file))
+    monkeypatch.setenv("WEREAD_WEB_COOKIE", "stale-env-cookie")
+
+    assert weread_cli.resolve_web_cookie() == "wr_skey=first"
+    cookie_file.write_text("wr_skey=rotated", encoding="utf-8")
+    assert weread_cli.resolve_web_cookie() == "wr_skey=rotated"
+
+
 def test_resolve_web_cookie_strips_quotes(monkeypatch):
     import dotenv
 
