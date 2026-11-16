@@ -520,6 +520,22 @@ class BilibiliClient(AbstractApiClient, ProxyRefreshMixin):
         }
         return await self.get(uri, post_data)
 
+    async def get_creator_relation_stat(self, creator_id: int) -> Dict:
+        """Follower / following counts for a UP."""
+        return await self.get(
+            "/x/relation/stat",
+            {"vmid": creator_id},
+            enable_params_sign=False,
+        )
+
+    async def get_creator_up_stat(self, creator_id: int) -> Dict:
+        """Archive likes and other UP aggregate stats."""
+        return await self.get(
+            "/x/space/upstat",
+            {"mid": creator_id},
+            enable_params_sign=False,
+        )
+
     async def get_creator_fans(
         self,
         creator_id: int,

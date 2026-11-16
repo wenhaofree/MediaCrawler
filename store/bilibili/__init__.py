@@ -22,9 +22,10 @@
 # @Time    : 2024/1/14 19:34
 # @Desc    :
 
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import config
+from tools import utils
 from var import source_keyword_var
 from tools.user_hash import anonymize_user_id, mask_nickname
 
@@ -105,6 +106,41 @@ async def update_up_info(video_item: Dict):
     }
     save_up_info = {key: value for key, value in save_up_info.items() if value is not None}
     utils.logger.info(f"[store.bilibili.update_up_info] bilibili user_id:{user_id}")
+    await BiliStoreFactory.create_store().store_creator(creator=save_up_info)
+
+
+async def save_creator(
+    user_id: int | str,
+    creator_info: Dict[str, Any],
+    *,
+    relation_stat: Optional[Dict[str, Any]] = None,
+    up_stat: Optional[Dict[str, Any]] = None,
+):
+    """
+    Persist a UP profile from space/acc/info (+ optional relation/upstat payloads).
+    Used by the HTTP add-account API and pure-API creator flows.
+    """
+    relation_stat = relation_stat or {}
+    up_stat = up_stat or {}
+    likes = up_stat.get("likes")
+    if likes is None and isinstance(up_stat.get("archive"), dict):
+        likes = up_stat["archive"].get("likes")
+    level_info = creator_info.get("level_info") or {}
+    official = creator_info.get("official") or creator_info.get("Official") or {}
+
+    save_up_info = {
+        "user_id": user_id,
+        "nickname": creator_info.get("name"),
+        "sex": creator_info.get("sex"),
+        "sign": creator_info.get("sign"),
+        "avatar": creator_info.get("face"),
+        "total_fans": relation_stat.get("follower", creator_info.get("follower")),
+        "total_liked": likes,
+        "user_rank": level_info.get("current_level", creator_info.get("level")),
+        "is_official": official.get("type"),
+    }
+    save_up_info = {key: value for key, value in save_up_info.items() if value is not None}
+    utils.logger.info(f"[store.bilibili.save_creator] bilibili user_id:{user_id}")
     await BiliStoreFactory.create_store().store_creator(creator=save_up_info)
 
 

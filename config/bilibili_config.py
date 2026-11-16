@@ -19,6 +19,9 @@
 # bilili platform configuration
 import os
 
+# B站 Cookie（优先读 .env 的 BILI_COOKIES；Docker 的 mediacrawler-bili 也会注入为 CRAWLER_COOKIES）
+BILI_COOKIES = (os.getenv("BILI_COOKIES") or "").strip()
+
 # Control the number of videos/posts crawled per day
 MAX_NOTES_PER_DAY = 1
 
