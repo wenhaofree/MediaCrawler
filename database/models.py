@@ -531,6 +531,56 @@ class XhsNoteStats(Base):
     )
 
 
+class GzhAccount(Base):
+    """WeChat official account profile (WeRead MP_WXS_*)."""
+    __tablename__ = 'gzh_account'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    account_id = Column(String(128), nullable=False, index=True, comment='公众号ID(MP_WXS_*)')
+    nickname = Column(Text, comment='公众号名称')
+    author = Column(Text, comment='作者/运营者')
+    avatar = Column(Text, comment='头像/封面')
+    category = Column(Text, comment='分类')
+    desc = Column(Text, comment='简介')
+    article_count = Column(BigInteger, comment='最近采样可见文章数')
+    add_ts = Column(BigInteger, comment='添加时间戳')
+    last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
+
+
+class GzhArticle(Base):
+    """Official-account article metadata with latest engagement counters."""
+    __tablename__ = 'gzh_article'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    review_id = Column(String(512), nullable=False, index=True, comment='微信读书 reviewId')
+    original_id = Column(String(512), index=True, comment='原始文章ID')
+    account_id = Column(String(128), nullable=False, index=True, comment='公众号ID')
+    title = Column(Text, comment='标题')
+    summary = Column(Text, comment='摘要')
+    account_name = Column(Text, comment='公众号名称快照')
+    article_url = Column(Text, comment='原文链接')
+    cover_url = Column(Text, comment='封面')
+    published_at = Column(BigInteger, index=True, comment='发布时间戳(秒)')
+    read_count = Column(BigInteger, comment='阅读量(最新)')
+    like_count = Column(BigInteger, comment='点赞量(最新)')
+    add_ts = Column(BigInteger, comment='添加时间戳')
+    last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
+
+
+class GzhAccountStats(Base):
+    """Append-only official-account engagement snapshots (no article_stats)."""
+    __tablename__ = 'gzh_account_stats'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    account_id = Column(String(128), nullable=False, index=True, comment='公众号ID')
+    sample_article_count = Column(BigInteger, comment='本轮采样文章数')
+    total_read_count = Column(BigInteger, comment='本轮样本阅读量合计')
+    total_like_count = Column(BigInteger, comment='本轮样本点赞合计')
+    collected_at = Column(String(64), nullable=False, comment='实际采集时间(ISO Asia/Shanghai)')
+    scheduled_slot = Column(String(32), default='manual', comment='采集时段')
+    source_type = Column(String(32), default='creator_crawl', comment='数据来源')
+    __table_args__ = (
+        Index('idx_gzh_account_stats_account_collected', 'account_id', 'collected_at'),
+    )
+
+
 class TiebaNote(Base):
     __tablename__ = 'tieba_note'
     id = Column(Integer, primary_key=True, comment='主键ID')

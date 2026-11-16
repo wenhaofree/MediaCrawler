@@ -22,6 +22,7 @@ from .websocket import router as websocket_router
 from .douyin import router as douyin_router
 from .bilibili import router as bilibili_router
 from .xhs import router as xhs_router
+from .gzh import router as gzh_router
 
 __all__ = [
     "crawler_router",
@@ -30,4 +31,5 @@ __all__ = [
     "douyin_router",
     "bilibili_router",
     "xhs_router",
+    "gzh_router",
 ]

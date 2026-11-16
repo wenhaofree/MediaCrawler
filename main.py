@@ -45,6 +45,7 @@ from media_platform.weibo import WeiboCrawler
 from media_platform.xhs import XiaoHongShuCrawler
 from media_platform.zhihu import ZhihuCrawler
 from media_platform.qimai import QimaiCrawler
+from media_platform.gzh import GzhCrawler
 from tools.async_file_writer import AsyncFileWriter
 from var import crawler_type_var
 
@@ -60,6 +61,7 @@ class CrawlerFactory:
         "tieba": TieBaCrawler,
         "zhihu": ZhihuCrawler,
         "qimai": QimaiCrawler,
+        "gzh": GzhCrawler,
     }
 
     @staticmethod

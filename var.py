@@ -74,3 +74,23 @@ def should_write_xhs_creator_stats(user_id: str) -> bool:
         return False
     seen.add(user_id)
     return True
+
+
+gzh_account_stats_seen_var: ContextVar[Optional[Set[str]]] = ContextVar(
+    "gzh_account_stats_seen", default=None
+)
+
+
+def reset_gzh_account_stats_seen() -> None:
+    gzh_account_stats_seen_var.set(set())
+
+
+def should_write_gzh_account_stats(account_id: str) -> bool:
+    seen = gzh_account_stats_seen_var.get()
+    if seen is None:
+        seen = set()
+        gzh_account_stats_seen_var.set(seen)
+    if account_id in seen:
+        return False
+    seen.add(account_id)
+    return True

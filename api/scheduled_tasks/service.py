@@ -36,19 +36,21 @@ from ..services import crawler_manager
 
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
-SUPPORTED_PLATFORMS = ("xhs", "dy", "bili", "wb", "zhihu")
+SUPPORTED_PLATFORMS = ("xhs", "dy", "bili", "wb", "zhihu", "gzh")
 ITEM_COUNT_CONFIG = {
     "xhs": ("xhs_note", "user_id", "xhs_user_id"),
     "dy": ("douyin_aweme", "sec_uid", "normalized_creator_id"),
     "bili": ("bilibili_video", "user_id", "normalized_creator_id"),
     "wb": ("weibo_note", "user_id", "normalized_creator_id"),
     "zhihu": ("zhihu_content", "user_url_token", "normalized_creator_id"),
+    "gzh": ("gzh_article", "account_id", "normalized_creator_id"),
 }
 TASKS_PAGE_SIZE = 20
 RUNS_PAGE_SIZE = 20
 DEFAULT_DY_SCHEDULE_TASK_NAME = "抖音增长快照(自动)"
 DEFAULT_BILI_SCHEDULE_TASK_NAME = "B站增长快照(自动)"
 DEFAULT_XHS_SCHEDULE_TASK_NAME = "小红书每日安全快照(自动)"
+DEFAULT_GZH_SCHEDULE_TASK_NAME = "公众号每日阅读量快照(自动)"
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -271,6 +273,18 @@ def _normalize_creator(platform: str, raw_value: str) -> dict[str, str]:
             "xhs_xsec_token": "",
             "xhs_xsec_source": "",
         }
+    if platform == "gzh":
+        from media_platform.gzh.weread_cli import normalize_account_id
+
+        account_id = normalize_account_id(value)
+        return {
+            "raw_input": value,
+            "normalized_creator_id": account_id,
+            "display_name": account_id,
+            "xhs_user_id": "",
+            "xhs_xsec_token": "",
+            "xhs_xsec_source": "",
+        }
     raise ValueError(f"Unsupported platform: {platform}")
 
 
@@ -463,6 +477,7 @@ class ScheduledTaskService:
         await self.ensure_default_douyin_schedule()
         await self.ensure_default_bilibili_schedule()
         await self.ensure_default_xhs_schedule()
+        await self.ensure_default_gzh_schedule()
         self._worker_task = asyncio.create_task(self._worker_loop())
         self._started = True
         await self.refresh_all_schedules()
@@ -767,6 +782,95 @@ class ScheduledTaskService:
                 "[ScheduledTaskService.ensure_default_xhs_schedule] created task #%s run_time=%s",
                 created.get("id"),
                 run_time,
+            )
+
+    async def _load_gzh_account_ids_from_db(self) -> list[str]:
+        from sqlalchemy import select
+
+        from database.db_session import get_session
+        from database.models import GzhAccount
+
+        try:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(GzhAccount.account_id).order_by(GzhAccount.id.asc())
+                )
+                rows = result.scalars().all()
+            return [str(item).strip() for item in rows if str(item).strip()]
+        except Exception as exc:
+            utils.logger.warning(
+                "[ScheduledTaskService._load_gzh_account_ids_from_db] failed: %s",
+                exc,
+            )
+            return []
+
+    async def ensure_default_gzh_schedule(self) -> None:
+        """Seed one daily WeChat official-account stats refresh task."""
+        if not _env_flag("AUTO_SEED_GZH_SCHEDULE", default=False):
+            return
+
+        creators = [
+            item.strip()
+            for item in os.getenv("GZH_ACCOUNT_IDS", "").split(",")
+            if item.strip()
+        ]
+        if not creators:
+            creators = await self._load_gzh_account_ids_from_db()
+        if not creators:
+            utils.logger.warning(
+                "[ScheduledTaskService.ensure_default_gzh_schedule] "
+                "no GZH_ACCOUNT_IDS / gzh_account rows; skip seeding"
+            )
+            return
+
+        run_time = os.getenv("GZH_SCHEDULE_RUN_TIME", "11:00").strip() or "11:00"
+        task_name = (
+            os.getenv("GZH_SCHEDULE_TASK_NAME", DEFAULT_GZH_SCHEDULE_TASK_NAME).strip()
+            or DEFAULT_GZH_SCHEDULE_TASK_NAME
+        )
+        try:
+            _parse_run_times(run_time)
+        except Exception as exc:
+            utils.logger.error(
+                "[ScheduledTaskService.ensure_default_gzh_schedule] invalid seed config: %s",
+                exc,
+            )
+            return
+
+        async with _get_connection() as db:
+            existing = await _fetchone(
+                db,
+                "SELECT id FROM scheduled_crawl_task WHERE name = ? AND platform = 'gzh' LIMIT 1",
+                (task_name,),
+            )
+
+        payload = ScheduledTaskUpsertRequest(
+            name=task_name,
+            platform=PlatformEnum.GZH,
+            run_time=run_time,
+            max_pages=1,
+            enable_comments=False,
+            enable_sub_comments=False,
+            save_option=SaveDataOptionEnum.POSTGRES,
+            status="active",
+            creators=creators,
+        )
+        if existing:
+            task_id = int(existing["id"])
+            await self.update_task(task_id, payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_gzh_schedule] updated task #%s run_time=%s creators=%s",
+                task_id,
+                run_time,
+                len(creators),
+            )
+        else:
+            created = await self.create_task(payload)
+            utils.logger.info(
+                "[ScheduledTaskService.ensure_default_gzh_schedule] created task #%s run_time=%s creators=%s",
+                created.get("id"),
+                run_time,
+                len(creators),
             )
 
     async def shutdown(self) -> None:

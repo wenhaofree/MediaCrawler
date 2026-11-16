@@ -178,6 +178,7 @@ from .weibo_config import *
 from .tieba_config import *
 from .zhihu_config import *
 from .qimai_config import *
+from .gzh_config import *
 
 # Container defaults are isolated through environment variables; CLI arguments still win.
 PLATFORM = os.getenv("CRAWLER_PLATFORM", PLATFORM)

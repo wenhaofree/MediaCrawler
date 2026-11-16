@@ -1,0 +1,29 @@
+# MediaCrawler gzh service: Python 3.11 + Node.js 22 (weread-omni requires >=22)
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl gnupg build-essential ca-certificates libgl1 libglib2.0-0 \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+COPY pyproject.toml uv.lock ./
+RUN sed -i 's|https://pypi.tuna.tsinghua.edu.cn/simple|https://pypi.org/simple|' pyproject.toml \
+    && uv lock \
+    && uv sync --frozen --no-dev
+
+COPY . .
+RUN chmod +x docker-entrypoint.sh 2>/dev/null || true
+
+EXPOSE 8080 8999
+CMD ["/bin/bash", "docker-entrypoint.sh"]

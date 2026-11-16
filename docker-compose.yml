@@ -144,6 +144,54 @@ services:
     networks:
       - wenhao-services
 
+  # 公众号采集服务（weread-omni CLI；宿主机端口 8088）
+  mediacrawler-gzh:
+    image: mediacrawler-gzh:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.gzh
+    container_name: mediacrawler-gzh
+    restart: unless-stopped
+    ports:
+      - "${GZH_APP_PORT:-8088}:8080"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_DB_USER:-postgres}:${POSTGRES_DB_PWD:-fuwenhao}@wenhao-postgres:5432/${POSTGRES_DB_NAME:-media_crawler}
+      POSTGRES_DB_HOST: wenhao-postgres
+      POSTGRES_DB_PORT: 5432
+      POSTGRES_DB_USER: ${POSTGRES_DB_USER:-postgres}
+      POSTGRES_DB_PWD: ${POSTGRES_DB_PWD:-fuwenhao}
+      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-media_crawler}
+      SAVE_DATA_OPTION: postgres
+      AUTO_INIT_DB: "true"
+      TZ: Asia/Shanghai
+      SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      CRAWLER_PLATFORM: gzh
+      CRAWLER_TYPE: creator
+      ENABLE_PURE_API_MODE: "true"
+      WEREAD_OMNI_CLI: "${WEREAD_OMNI_CLI:-/opt/weread-omni/bin/weread-omni.js}"
+      WEREAD_WEB_COOKIE: "${WEREAD_WEB_COOKIE:-}"
+      GZH_WEB_COOKIE: "${GZH_WEB_COOKIE:-}"
+      GZH_ACCOUNT_IDS: "${GZH_ACCOUNT_IDS:-}"
+      GZH_STATS_LIMIT: "${GZH_STATS_LIMIT:-20}"
+      GZH_ARTICLES_COUNT: "${GZH_ARTICLES_COUNT:-20}"
+      WEREAD_CONFIG_DIR: "${WEREAD_CONFIG_DIR:-/root/.config/weread}"
+      AUTO_SEED_DY_SCHEDULE: "false"
+      AUTO_SEED_BILI_SCHEDULE: "false"
+      AUTO_SEED_XHS_SCHEDULE: "false"
+      AUTO_SEED_GZH_SCHEDULE: "${AUTO_SEED_GZH_SCHEDULE:-true}"
+      GZH_SCHEDULE_RUN_TIME: "${GZH_SCHEDULE_RUN_TIME:-11:00}"
+      GZH_SCHEDULE_TASK_NAME: "${GZH_SCHEDULE_TASK_NAME:-公众号每日阅读量快照(自动)}"
+    volumes:
+      - ./data/gzh:/app/data
+      - ./.env:/app/.env:ro
+      - ./config/base_config.py:/app/config/base_config.py:ro
+      # Host-built weread-omni (npm ci && npm run build)
+      - ${WEREAD_OMNI_HOST_PATH:-/opt/weread-omni}:/opt/weread-omni:ro
+      # Persist WeRead mobile login session (login once on host or via docker exec)
+      - ${WEREAD_CONFIG_HOST_PATH:-./data/weread-config}:/root/.config/weread
+    networks:
+      - wenhao-services
+
 # 声明引用宿主机已存在的外部 Docker 网络
 networks:
   wenhao-services:

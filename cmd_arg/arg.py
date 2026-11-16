@@ -51,6 +51,7 @@ class PlatformEnum(str, Enum):
     TIEBA = "tieba"
     ZHIHU = "zhihu"
     QIMAI = "qimai"
+    GZH = "gzh"
 
 
 class LoginTypeEnum(str, Enum):
@@ -178,7 +179,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             PlatformEnum,
             typer.Option(
                 "--platform",
-                help="Media platform selection (xhs=XiaoHongShu | dy=Douyin | ks=Kuaishou | goofish=Goofish | bili=Bilibili | wb=Weibo | tieba=Baidu Tieba | zhihu=Zhihu | qimai=Qimai)",
+                help="Media platform selection (xhs=XiaoHongShu | dy=Douyin | ks=Kuaishou | goofish=Goofish | bili=Bilibili | wb=Weibo | tieba=Baidu Tieba | zhihu=Zhihu | qimai=Qimai | gzh=WeChat Official Account)",
                 rich_help_panel="Basic Configuration",
             ),
         ] = _coerce_enum(PlatformEnum, config.PLATFORM, PlatformEnum.XHS),
@@ -536,11 +537,19 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                     f"https://www.zhihu.com/people/{item}" if not item.startswith("http") else item
                     for item in creator_id_list
                 ]
+            elif platform == PlatformEnum.GZH:
+                config.GZH_ACCOUNT_IDS = creator_id_list
         elif platform == PlatformEnum.XHS:
             configured_creators = _dotenv_or_env("XHS_CREATOR_IDS")
             if configured_creators:
                 config.XHS_CREATOR_ID_LIST = [
                     item.strip() for item in configured_creators.split(",") if item.strip()
+                ]
+        elif platform == PlatformEnum.GZH:
+            configured_accounts = _dotenv_or_env("GZH_ACCOUNT_IDS")
+            if configured_accounts:
+                config.GZH_ACCOUNT_IDS = [
+                    item.strip() for item in configured_accounts.split(",") if item.strip()
                 ]
 
         return SimpleNamespace(

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 
-SUPPORTED_PLATFORMS = ("xhs", "dy", "bili", "wb", "zhihu")
+SUPPORTED_PLATFORMS = ("xhs", "dy", "bili", "wb", "zhihu", "gzh")
 SUPPORTED_ENTITY_TYPES = ("content", "comment", "creator", "creator_stats", "aweme_stats")
 
 PLATFORM_LABELS: Dict[str, str] = {
@@ -18,6 +18,7 @@ PLATFORM_LABELS: Dict[str, str] = {
     "bili": "Bilibili",
     "wb": "微博",
     "zhihu": "知乎",
+    "gzh": "公众号",
 }
 
 ENTITY_TYPE_LABELS: Dict[str, str] = {
@@ -505,6 +506,70 @@ REGISTRY: Dict[str, Dict[str, ViewerTableConfig]] = {
                 "'get_voteup_count', get_voteup_count)"
             ),
             raw_preview_expr="SUBSTR(COALESCE(NULLIF(url_token, ''), ''), 1, 140)",
+        ),
+    },
+    "gzh": {
+        "content": ViewerTableConfig(
+            platform="gzh",
+            entity_type="content",
+            table_name="gzh_article",
+            pk_field="id",
+            source_id_expr="review_id",
+            title_expr="COALESCE(NULLIF(title, ''), CAST(review_id AS TEXT))",
+            summary_expr="COALESCE(summary, '')",
+            author_expr="COALESCE(NULLIF(account_name, ''), CAST(account_id AS TEXT))",
+            avatar_expr="COALESCE(cover_url, '')",
+            publish_raw_expr="published_at",
+            sort_ts_expr=normalize_ts_sql("published_at"),
+            external_url_expr="COALESCE(article_url, '')",
+            stats_json_expr=(
+                "json_object("
+                "'read_count', read_count, "
+                "'like_count', like_count, "
+                "'account_id', account_id)"
+            ),
+            raw_preview_expr="SUBSTR(COALESCE(summary, ''), 1, 140)",
+        ),
+        "creator": ViewerTableConfig(
+            platform="gzh",
+            entity_type="creator",
+            table_name="gzh_account",
+            pk_field="id",
+            source_id_expr="account_id",
+            title_expr="COALESCE(NULLIF(nickname, ''), CAST(account_id AS TEXT))",
+            summary_expr="COALESCE(NULLIF(\"desc\", ''), COALESCE(category, ''))",
+            author_expr="COALESCE(NULLIF(nickname, ''), CAST(account_id AS TEXT))",
+            avatar_expr="COALESCE(avatar, '')",
+            publish_raw_expr="last_modify_ts",
+            sort_ts_expr=normalize_ts_sql("last_modify_ts"),
+            external_url_expr="''",
+            stats_json_expr=(
+                "json_object("
+                "'article_count', article_count, "
+                "'author', author)"
+            ),
+            raw_preview_expr="SUBSTR(COALESCE(NULLIF(\"desc\", ''), ''), 1, 140)",
+        ),
+        "creator_stats": ViewerTableConfig(
+            platform="gzh",
+            entity_type="creator_stats",
+            table_name="gzh_account_stats",
+            pk_field="id",
+            source_id_expr="account_id",
+            title_expr="CAST(account_id AS TEXT)",
+            summary_expr="COALESCE(scheduled_slot, '') || ' / ' || COALESCE(source_type, '')",
+            author_expr="CAST(account_id AS TEXT)",
+            avatar_expr="''",
+            publish_raw_expr="collected_at",
+            sort_ts_expr="collected_at",
+            external_url_expr="''",
+            stats_json_expr=(
+                "json_object("
+                "'sample_article_count', sample_article_count, "
+                "'total_read_count', total_read_count, "
+                "'total_like_count', total_like_count)"
+            ),
+            raw_preview_expr="COALESCE(collected_at, '')",
         ),
     },
 }
