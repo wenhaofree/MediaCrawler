@@ -19,6 +19,7 @@ from media_platform.gzh.weread_cli import (
     map_book_info_to_account,
     map_mobile_article,
     map_stats_article,
+    merge_article_sources,
     normalize_account_id,
 )
 from store import gzh as gzh_store
@@ -119,56 +120,76 @@ class GzhCrawler(AbstractCrawler):
         stats_saved = False
         warnings: List[str] = []
         if fetch_articles:
+            fetch_n = max(1, min(100, int(max_n)))
+            mobile_mapped: List[Dict] = []
+            stats_mapped: List[Dict] = []
+
             try:
-                mobile = await self.bridge.list_articles(
-                    account_id, count=min(max_n, getattr(config, "GZH_ARTICLES_COUNT", 20))
-                )
+                mobile = await self.bridge.list_articles(account_id, count=fetch_n)
                 for item in mobile.get("articles") or []:
                     mapped = map_mobile_article(account_id, item)
-                    if mapped.get("review_id") or mapped.get("original_id"):
-                        await gzh_store.upsert_article(mapped)
-                        articles_saved += 1
+                    if mapped.get("review_id") or mapped.get("original_id") or mapped.get("title"):
+                        mobile_mapped.append(mapped)
             except WereadCliError as exc:
                 msg = f"articles list failed: {exc}"
                 warnings.append(msg)
                 utils.logger.warning(f"[GzhCrawler] {account_id}: {msg}")
 
-            total_read = 0
-            total_like = 0
-            sample_count = 0
             try:
-                stats = await self.bridge.article_stats(account_id, limit=max_n)
+                stats = await self.bridge.article_stats(account_id, limit=fetch_n)
                 if stats.get("accountName") and not account_payload.get("nickname"):
                     account_payload["nickname"] = stats.get("accountName") or ""
                 for item in stats.get("articles") or []:
                     mapped = map_stats_article(account_id, item)
-                    if not (mapped.get("review_id") or mapped.get("original_id")):
-                        continue
-                    await gzh_store.upsert_article(mapped)
-                    sample_count += 1
-                    total_read += int(mapped.get("read_count") or 0)
-                    total_like += int(mapped.get("like_count") or 0)
-                if sample_count:
-                    articles_saved = max(articles_saved, sample_count)
-                    if write_account_stats:
-                        await gzh_store.save_account(
-                            {
-                                **account_payload,
-                                "article_count": sample_count,
-                            },
-                            write_stats=True,
-                            sample_article_count=sample_count,
-                            total_read_count=total_read,
-                            total_like_count=total_like,
-                            source_type=source,
-                        )
-                        stats_saved = True
+                    if mapped.get("review_id") or mapped.get("original_id") or mapped.get("title"):
+                        stats_mapped.append(mapped)
             except WereadCliError as exc:
-                msg = (
-                    f"article-stats failed (check WEREAD_WEB_COOKIE): {exc}"
-                )
+                msg = f"article-stats failed (check WEREAD_WEB_COOKIE): {exc}"
                 warnings.append(msg)
                 utils.logger.warning(f"[GzhCrawler] {account_id}: {msg}")
+
+            merged = merge_article_sources(mobile_mapped, stats_mapped)
+            # Only persist stats-backed rows so every article has read/like;
+            # cover/url are enriched from mobile when the title matches.
+            to_save = [m for m in merged if m.get("read_count") is not None]
+            if stats_mapped and not to_save:
+                to_save = list(stats_mapped)
+
+            total_read = 0
+            total_like = 0
+            with_cover = 0
+            for mapped in to_save:
+                await gzh_store.upsert_article(mapped)
+                articles_saved += 1
+                total_read += int(mapped.get("read_count") or 0)
+                total_like += int(mapped.get("like_count") or 0)
+                if mapped.get("cover_url"):
+                    with_cover += 1
+
+            if stats_mapped:
+                stats_saved = True
+                # Drop legacy mobile-only rows (cover without read) for this account.
+                removed = await gzh_store.delete_articles_without_read(account_id)
+                if removed:
+                    utils.logger.info(
+                        f"[GzhCrawler] {account_id} removed incomplete articles={removed}"
+                    )
+                if write_account_stats:
+                    await gzh_store.save_account(
+                        {
+                            **account_payload,
+                            "article_count": len(to_save),
+                        },
+                        write_stats=True,
+                        sample_article_count=len(to_save),
+                        total_read_count=total_read,
+                        total_like_count=total_like,
+                        source_type=source,
+                    )
+            utils.logger.info(
+                f"[GzhCrawler] {account_id} saved={articles_saved} with_cover={with_cover} "
+                f"mobile={len(mobile_mapped)} stats={len(stats_mapped)}"
+            )
 
         return {
             "account_id": account_id,

@@ -338,3 +338,98 @@ def map_stats_article(account_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
         "read_count": item.get("readCount"),
         "like_count": item.get("likeCount"),
     }
+
+
+def _article_merge_key(article: Dict[str, Any]) -> str:
+    title = (article.get("title") or "").strip()
+    published = article.get("published_at")
+    account_id = (article.get("account_id") or "").strip()
+    return f"{account_id}|{title}|{published if published is not None else ''}"
+
+
+def _pick_nonempty(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
+def merge_article_sources(
+    mobile_articles: List[Dict[str, Any]],
+    stats_articles: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Merge mobile list (cover/url) with stats list (read/like) into one row per article.
+    Match key: account_id + title + published_at (then title-only fallback).
+    """
+    by_full: Dict[str, Dict[str, Any]] = {}
+    by_title: Dict[str, Dict[str, Any]] = {}
+
+    def _upsert(mapped: Dict[str, Any]) -> None:
+        title = (mapped.get("title") or "").strip()
+        if not title:
+            return
+        account_id = (mapped.get("account_id") or "").strip()
+        full_key = _article_merge_key(mapped)
+        title_key = f"{account_id}|{title}"
+        existing = by_full.get(full_key) or by_title.get(title_key)
+        if not existing:
+            row = dict(mapped)
+            by_full[full_key] = row
+            by_title[title_key] = row
+            return
+        # Prefer stats review/original/read; prefer mobile cover/url.
+        existing["review_id"] = _pick_nonempty(
+            existing.get("review_id") if "_WR" in str(existing.get("review_id") or "") else None,
+            mapped.get("review_id") if "_WR" in str(mapped.get("review_id") or "") else None,
+            existing.get("review_id"),
+            mapped.get("review_id"),
+        )
+        existing["original_id"] = _pick_nonempty(
+            existing.get("original_id"), mapped.get("original_id")
+        )
+        existing["summary"] = _pick_nonempty(existing.get("summary"), mapped.get("summary"))
+        existing["account_name"] = _pick_nonempty(
+            existing.get("account_name"), mapped.get("account_name")
+        )
+        existing["article_url"] = _pick_nonempty(
+            existing.get("article_url"), mapped.get("article_url")
+        )
+        existing["cover_url"] = _pick_nonempty(
+            existing.get("cover_url"), mapped.get("cover_url")
+        )
+        if existing.get("published_at") is None:
+            existing["published_at"] = mapped.get("published_at")
+        if mapped.get("read_count") is not None:
+            existing["read_count"] = mapped.get("read_count")
+        if mapped.get("like_count") is not None:
+            existing["like_count"] = mapped.get("like_count")
+        by_full[_article_merge_key(existing)] = existing
+        by_title[title_key] = existing
+
+    for item in mobile_articles:
+        _upsert(item)
+    for item in stats_articles:
+        _upsert(item)
+
+    # Deduplicate by object identity while preserving order (stats-enriched first)
+    ordered: List[Dict[str, Any]] = []
+    seen_ids: set[int] = set()
+    for row in list(by_full.values()):
+        obj_id = id(row)
+        if obj_id in seen_ids:
+            continue
+        seen_ids.add(obj_id)
+        ordered.append(row)
+    # Prefer rows that already have both cover + read
+    ordered.sort(
+        key=lambda r: (
+            0 if (r.get("cover_url") and r.get("read_count") is not None) else 1,
+            0 if r.get("read_count") is not None else 1,
+            0 if r.get("cover_url") else 1,
+        )
+    )
+    return ordered

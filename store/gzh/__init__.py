@@ -83,3 +83,11 @@ async def save_account_stats_snapshot(
             "_source_type": source_type,
         }
     )
+
+
+async def delete_articles_without_read(account_id: str) -> int:
+    """Remove legacy mobile-only rows that never got read/like enrichment."""
+    store = GzhStoreFactory.create_store()
+    if hasattr(store, "delete_articles_without_read"):
+        return await store.delete_articles_without_read(account_id)
+    return 0

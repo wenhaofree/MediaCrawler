@@ -25,7 +25,7 @@
 # 创作者个人档案表（XhsCreator/DyCreator/WeiboCreator/TiebaCreator/
 # ZhihuCreator/BilibiliUpInfo/BilibiliContactInfo）已整体移除。
 
-from sqlalchemy import create_engine, Column, Integer, Text, String, BigInteger, Index
+from sqlalchemy import create_engine, Column, Integer, Text, String, BigInteger, Index, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -535,7 +535,7 @@ class GzhAccount(Base):
     """WeChat official account profile (WeRead MP_WXS_*)."""
     __tablename__ = 'gzh_account'
     id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
-    account_id = Column(String(128), nullable=False, index=True, comment='公众号ID(MP_WXS_*)')
+    account_id = Column(String(128), nullable=False, unique=True, index=True, comment='公众号ID(MP_WXS_*)')
     nickname = Column(Text, comment='公众号名称')
     author = Column(Text, comment='作者/运营者')
     avatar = Column(Text, comment='头像/封面')
@@ -550,8 +550,9 @@ class GzhArticle(Base):
     """Official-account article metadata with latest engagement counters."""
     __tablename__ = 'gzh_article'
     id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
-    review_id = Column(String(512), nullable=False, index=True, comment='微信读书 reviewId')
-    original_id = Column(String(512), index=True, comment='原始文章ID')
+    # Business unique key from WeRead (mobile/stats may differ; store upsert merges by review/original/title)
+    review_id = Column(String(512), nullable=False, unique=True, index=True, comment='微信读书 reviewId(唯一)')
+    original_id = Column(String(512), index=True, comment='原始文章ID(非空时唯一)')
     account_id = Column(String(128), nullable=False, index=True, comment='公众号ID')
     title = Column(Text, comment='标题')
     summary = Column(Text, comment='摘要')
@@ -563,6 +564,15 @@ class GzhArticle(Base):
     like_count = Column(BigInteger, comment='点赞量(最新)')
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
+    __table_args__ = (
+        Index(
+            'uq_gzh_article_original_id',
+            'original_id',
+            unique=True,
+            postgresql_where=text("original_id IS NOT NULL AND original_id <> ''"),
+            sqlite_where=text("original_id IS NOT NULL AND original_id <> ''"),
+        ),
+    )
 
 
 class GzhAccountStats(Base):
