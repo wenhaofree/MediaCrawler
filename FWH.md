@@ -149,7 +149,45 @@ uv run main.py \
 
 > Chrome/9222 只保留给闲鱼、七麦或需要人工登录排障的平台；本节的抖音、B站和小红书验证无需启动 Chrome。
 
-## 5. 小红书：作者、笔记与快照
+## 5. 公众号作者添加接口
+
+公众号服务默认端口是 `${GZH_APP_PORT:-8088}`。`POST /api/gzh/account/add` 会通过本机的 `weread-omni` 查询公众号资料并写入 `gzh_account`；当 `fetch_articles=true` 时，文章与阅读量会写入 `gzh_article`、`gzh_account_stats`。
+
+仅添加作者资料（不请求文章阅读量，无需在请求中传 Cookie）：
+
+```bash
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d '{"account_id":"MP_WXS_2390745668","fetch_articles":false}'
+```
+
+按公众号名称检索并添加首个匹配账号：
+
+```bash
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d '{"keyword":"人民日报","fetch_articles":false}'
+```
+
+采集文章与阅读量时，先在服务器 `.env` 配置 `WEREAD_WEB_COOKIE`，不要把 Cookie 放进 cURL 历史记录：
+
+```bash
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d '{"account_id":"MP_WXS_2390745668","fetch_articles":true,"max_articles":20}'
+```
+
+响应会返回 `account_id`、`nickname`、`author`、`avatar`、`category`、`desc`、`articles_saved`、`stats_saved` 与 `warnings`。接口依赖 `weread-omni`，部署前需设置 `WEREAD_OMNI_CLI` 并完成对应登录配置。
+
+阅读量接口使用的是微信读书 Web 会话；`WEREAD_WEB_COOKIE` 与 `weread-omni` 保存的手机端登录会话独立，无法互相刷新。Cookie 失效后只需安全地更新宿主机 `.env` 中的 `WEREAD_WEB_COOKIE`，程序会在下一次阅读量请求时重新读取，无需重启容器。建议将账号资料采集与阅读量采集分开：资料添加使用 `fetch_articles=false`，阅读量由每天一次的定时任务执行；出现“登录超时”时暂停任务、重新在本人已登录的微信读书 Web 会话中取得 Cookie，避免连续重试。
+
+```bash
+docker exec -e PGPASSWORD="$POSTGRES_DB_PWD" -it wenhao-postgres \
+  psql -U "$POSTGRES_DB_USER" -d "$POSTGRES_DB_NAME" -c \
+  "SELECT account_id, nickname, author, last_modify_ts FROM gzh_account ORDER BY last_modify_ts DESC LIMIT 10;"
+```
+
+## 6. 小红书：作者、笔记与快照
 
 小红书和抖音一样使用纯 HTTP API + 本地签名，不启动 Chromium、不连接 9222，也不支持二维码回退。Docker 的 `mediacrawler-xhs` 不安装浏览器；Cookie 失效时先在本机浏览器完成登录并重新复制 Cookie，再更新服务器 `.env`。
 

@@ -106,6 +106,10 @@ async def add_gzh_account(req: AddAccountRequest):
         "data": {
             "account_id": result.get("account_id"),
             "nickname": result.get("nickname"),
+            "author": result.get("author"),
+            "avatar": result.get("avatar"),
+            "category": result.get("category"),
+            "desc": result.get("desc"),
             "articles_saved": result.get("articles_saved", 0),
             "stats_saved": bool(result.get("stats_saved")),
             "warnings": warnings,

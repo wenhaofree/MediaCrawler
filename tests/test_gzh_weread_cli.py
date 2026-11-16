@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from media_platform.gzh import weread_cli
 from media_platform.gzh.weread_cli import (
     map_book_info_to_account,
     map_mobile_article,
@@ -74,6 +75,27 @@ def test_map_mobile_article():
     assert mapped["read_count"] is None
 
 
+def test_map_mobile_article_unwraps_captcha_article_url():
+    mapped = map_mobile_article(
+        "MP_WXS_3913422171",
+        {
+            "reviewId": "r1",
+            "mpInfo": {
+                "title": "标题",
+                "doc_url": (
+                    "https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?"
+                    "poc_token=token&target_url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%3F"
+                    "__biz%3DMzkxMzQyMjE3MQ%3D%3D%26mid%3D2247528566%26idx%3D5%26sn%3Dfe49495c4914aa8231edf2b6e9df2508"
+                ),
+            },
+        },
+    )
+
+    assert mapped["article_url"] == (
+        "https://mp.weixin.qq.com/s?__biz=MzkxMzQyMjE3MQ==&mid=2247528566&idx=5&sn=fe49495c4914aa8231edf2b6e9df2508"
+    )
+
+
 def test_map_stats_article():
     mapped = map_stats_article(
         "MP_WXS_2390745668",
@@ -91,3 +113,17 @@ def test_map_stats_article():
     assert mapped["read_count"] == 100000
     assert mapped["like_count"] == 2691
     assert mapped["account_name"] == "洞见"
+
+
+@pytest.mark.asyncio
+async def test_review_single_returns_review_detail(monkeypatch):
+    bridge = weread_cli.WereadOmniBridge.__new__(weread_cli.WereadOmniBridge)
+
+    async def fake_run_json(args):
+        assert args == ["review", "single", "review-1"]
+        return {"review": {"reviewId": "review-1", "mpInfo": {"doc_url": "https://mp.weixin.qq.com/s/x"}}}
+
+    monkeypatch.setattr(bridge, "run_json", fake_run_json)
+    detail = await bridge.review_single("review-1")
+
+    assert detail["mpInfo"]["doc_url"] == "https://mp.weixin.qq.com/s/x"

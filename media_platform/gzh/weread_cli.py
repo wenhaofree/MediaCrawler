@@ -13,6 +13,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlparse, urlunparse
 
 import config
 from tools import utils
@@ -270,6 +271,12 @@ class WereadOmniBridge:
         data = await self.run_json(args)
         return data if isinstance(data, dict) else {}
 
+    async def review_single(self, review_id: str) -> Dict[str, Any]:
+        """Load review details, including mpInfo.doc_url when list results omit it."""
+        data = await self.run_json(["review", "single", str(review_id)])
+        review = data.get("review") if isinstance(data, dict) else None
+        return review if isinstance(review, dict) else {}
+
     async def article_stats(
         self, account_id: str, *, limit: int = 20, offset: int = 0
     ) -> Dict[str, Any]:
@@ -304,6 +311,23 @@ def map_book_info_to_account(account_id: str, book: Dict[str, Any]) -> Dict[str,
     }
 
 
+def _article_url(*values: Any) -> str:
+    """Keep the real mp.weixin.qq.com article URL, unwrapping captcha redirects."""
+    for value in values:
+        url = str(value or "").strip()
+        if not url:
+            continue
+        parsed = urlparse(url)
+        if parsed.hostname == "mp.weixin.qq.com" and parsed.path == "/mp/wappoc_appmsgcaptcha":
+            url = (parse_qs(parsed.query).get("target_url") or [""])[0]
+            parsed = urlparse(url)
+        if parsed.hostname == "mp.weixin.qq.com" and (
+            parsed.path == "/s" or parsed.path.startswith("/s/")
+        ):
+            return urlunparse(parsed._replace(fragment=""))
+    return ""
+
+
 def map_mobile_article(account_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
     mp = item.get("mpInfo") if isinstance(item.get("mpInfo"), dict) else {}
     published = normalize_published_at(
@@ -316,7 +340,10 @@ def map_mobile_article(account_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
         "title": mp.get("title") or item.get("title") or "",
         "summary": mp.get("content") or item.get("summary") or "",
         "account_name": mp.get("mp_name") or item.get("accountName") or "",
-        "article_url": mp.get("doc_url") or mp.get("docUrl") or "",
+        "article_url": _article_url(
+            mp.get("doc_url"), mp.get("docUrl"), mp.get("articleUrl"), mp.get("url"),
+            item.get("doc_url"), item.get("docUrl"), item.get("articleUrl"), item.get("url"),
+        ),
         "cover_url": mp.get("pic_url") or mp.get("picUrl") or "",
         "published_at": published,
         "read_count": None,
@@ -332,7 +359,10 @@ def map_stats_article(account_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
         "title": item.get("title") or "",
         "summary": item.get("summary") or "",
         "account_name": item.get("accountName") or "",
-        "article_url": item.get("articleUrl") or item.get("doc_url") or "",
+        "article_url": _article_url(
+            item.get("articleUrl"), item.get("article_url"), item.get("doc_url"),
+            item.get("docUrl"), item.get("url"),
+        ),
         "cover_url": item.get("coverUrl") or item.get("pic_url") or "",
         "published_at": normalize_published_at(item.get("publishedAt") or item.get("time")),
         "read_count": item.get("readCount"),

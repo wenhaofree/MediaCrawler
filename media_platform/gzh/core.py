@@ -128,6 +128,23 @@ class GzhCrawler(AbstractCrawler):
                 mobile = await self.bridge.list_articles(account_id, count=fetch_n)
                 for item in mobile.get("articles") or []:
                     mapped = map_mobile_article(account_id, item)
+                    if not mapped.get("article_url") and mapped.get("review_id"):
+                        try:
+                            review = await self.bridge.review_single(mapped["review_id"])
+                            if review.get("mpInfo"):
+                                mapped = map_mobile_article(
+                                    account_id,
+                                    {
+                                        **item,
+                                        **review,
+                                        "reviewId": review.get("reviewId") or mapped["review_id"],
+                                    },
+                                )
+                            await asyncio.sleep(getattr(config, "GZH_REQUEST_INTERVAL_SEC", 1.5))
+                        except WereadCliError as exc:
+                            utils.logger.warning(
+                                f"[GzhCrawler] article detail unavailable {mapped['review_id']}: {exc}"
+                            )
                     if mapped.get("review_id") or mapped.get("original_id") or mapped.get("title"):
                         mobile_mapped.append(mapped)
             except WereadCliError as exc:
@@ -149,11 +166,11 @@ class GzhCrawler(AbstractCrawler):
                 utils.logger.warning(f"[GzhCrawler] {account_id}: {msg}")
 
             merged = merge_article_sources(mobile_mapped, stats_mapped)
-            # Only persist stats-backed rows so every article has read/like;
-            # cover/url are enriched from mobile when the title matches.
-            to_save = [m for m in merged if m.get("read_count") is not None]
-            if stats_mapped and not to_save:
-                to_save = list(stats_mapped)
+            # Keep source articles even when the Web-only stats endpoint is unavailable.
+            to_save = merged
+            stats_article_count = sum(
+                1 for mapped in to_save if mapped.get("read_count") is not None
+            )
 
             total_read = 0
             total_like = 0
@@ -168,12 +185,6 @@ class GzhCrawler(AbstractCrawler):
 
             if stats_mapped:
                 stats_saved = True
-                # Drop legacy mobile-only rows (cover without read) for this account.
-                removed = await gzh_store.delete_articles_without_read(account_id)
-                if removed:
-                    utils.logger.info(
-                        f"[GzhCrawler] {account_id} removed incomplete articles={removed}"
-                    )
                 if write_account_stats:
                     await gzh_store.save_account(
                         {
@@ -181,7 +192,7 @@ class GzhCrawler(AbstractCrawler):
                             "article_count": len(to_save),
                         },
                         write_stats=True,
-                        sample_article_count=len(to_save),
+                        sample_article_count=stats_article_count,
                         total_read_count=total_read,
                         total_like_count=total_like,
                         source_type=source,
@@ -194,6 +205,10 @@ class GzhCrawler(AbstractCrawler):
         return {
             "account_id": account_id,
             "nickname": account_payload.get("nickname"),
+            "author": account_payload.get("author"),
+            "avatar": account_payload.get("avatar"),
+            "category": account_payload.get("category"),
+            "desc": account_payload.get("desc"),
             "articles_saved": articles_saved,
             "stats_saved": stats_saved,
             "warnings": warnings,
