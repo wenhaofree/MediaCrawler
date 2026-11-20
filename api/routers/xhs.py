@@ -133,49 +133,116 @@ def _cookie_expired_http_detail(exc: Optional[BaseException] = None) -> str:
     return f"小红书 Cookie 无效或已过期{suffix}。{cookie_update_hint()}"
 
 
+def _cookie_source_snapshot(cookie_str: str) -> Dict[str, Any]:
+    cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
+    return {
+        "configured": True,
+        "looks_like_xhs": looks_like_xhs_cookies(cookie_str),
+        "length": len(cookie_str),
+        "has_a1": "a1" in cookie_dict,
+        "has_web_session": "web_session" in cookie_dict,
+        "web_session_prefix": (cookie_dict.get("web_session") or "")[:8] or None,
+    }
+
+
+@router.get("/cookie/inspect")
+async def xhs_cookie_inspect():
+    """Local-only Cookie resolution check (no outbound call to Xiaohongshu)."""
+    try:
+        cookie_str = resolve_xhs_cookies()
+        if not cookie_str:
+            return {
+                "code": 400,
+                "message": "未解析到 Cookie",
+                "data": {
+                    "configured": False,
+                    "hint": cookie_update_hint(),
+                },
+            }
+        return {
+            "code": 200,
+            "message": "已解析到 Cookie（未向小红书发请求）",
+            "data": {
+                **_cookie_source_snapshot(cookie_str),
+                "hint": None,
+            },
+        }
+    except Exception as exc:
+        utils.logger.exception("[api.xhs] cookie inspect failed: %s", exc)
+        return {
+            "code": 500,
+            "message": f"本地 Cookie 解析异常: {exc}",
+            "data": {"configured": False, "hint": cookie_update_hint()},
+        }
+
+
 @router.get("/cookie/status")
 async def xhs_cookie_status():
     """Probe whether the currently resolved Cookie is still valid."""
-    cookie_str = resolve_xhs_cookies()
-    if not cookie_str or not looks_like_xhs_cookies(cookie_str):
-        return {
-            "code": 400,
-            "message": "未配置有效 Cookie",
-            "data": {"valid": False, "hint": cookie_update_hint()},
-        }
-
-    client = _get_xhs_client()
     try:
-        valid = await client.pong()
-    except CookieExpiredError as exc:
-        return {
-            "code": 401,
-            "message": _cookie_expired_http_detail(exc),
-            "data": {"valid": False, "reason": "cookie_expired"},
-        }
-    except PlatformAccessError as exc:
-        return {
-            "code": 403,
-            "message": f"小红书访问受限: {exc}",
-            "data": {"valid": False, "reason": "access_restricted"},
-        }
-    except Exception as exc:
-        return {
-            "code": 502,
-            "message": f"Cookie 检测异常: {exc}",
-            "data": {"valid": False, "reason": "probe_failed"},
-        }
+        cookie_str = resolve_xhs_cookies()
+        if not cookie_str or not looks_like_xhs_cookies(cookie_str):
+            return {
+                "code": 400,
+                "message": "未配置有效 Cookie",
+                "data": {"valid": False, "hint": cookie_update_hint()},
+            }
 
-    # Persist any Set-Cookie rotation observed during the probe.
-    persist_xhs_cookies(client.headers.get("Cookie", ""))
-    return {
-        "code": 200,
-        "message": "Cookie 有效" if valid else "Cookie 无效或已过期",
-        "data": {
-            "valid": bool(valid),
-            "hint": None if valid else cookie_update_hint(),
-        },
-    }
+        client = _get_xhs_client()
+        try:
+            # Bound the outbound probe so a hung XHS network never wedges the API worker.
+            valid = await asyncio.wait_for(client.pong(), timeout=20.0)
+        except asyncio.TimeoutError:
+            return {
+                "code": 504,
+                "message": "探测小红书登录态超时（请检查容器出网 / DNS）",
+                "data": {
+                    "valid": False,
+                    "reason": "probe_timeout",
+                    **_cookie_source_snapshot(cookie_str),
+                },
+            }
+        except CookieExpiredError as exc:
+            return {
+                "code": 401,
+                "message": _cookie_expired_http_detail(exc),
+                "data": {"valid": False, "reason": "cookie_expired"},
+            }
+        except PlatformAccessError as exc:
+            return {
+                "code": 403,
+                "message": f"小红书访问受限: {exc}",
+                "data": {"valid": False, "reason": "access_restricted"},
+            }
+        except Exception as exc:
+            utils.logger.exception("[api.xhs] cookie status probe failed: %s", exc)
+            return {
+                "code": 502,
+                "message": f"Cookie 检测异常: {exc}",
+                "data": {"valid": False, "reason": "probe_failed"},
+            }
+
+        # Persist any Set-Cookie rotation observed during the probe.
+        persist_xhs_cookies(client.headers.get("Cookie", ""))
+        return {
+            "code": 200,
+            "message": "Cookie 有效" if valid else "Cookie 无效或已过期",
+            "data": {
+                "valid": bool(valid),
+                "hint": None if valid else cookie_update_hint(),
+                **_cookie_source_snapshot(cookie_str),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Never let an unexpected error abort the TCP connection.
+        utils.logger.exception("[api.xhs] cookie status crashed: %s", exc)
+        return {
+            "code": 500,
+            "message": f"Cookie 状态接口异常: {exc}",
+            "data": {"valid": False, "reason": "internal_error"},
+        }
 
 
 @router.post("/creator/add")
