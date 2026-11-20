@@ -40,7 +40,9 @@ from tools import utils
 if TYPE_CHECKING:
     from proxy.proxy_ip_pool import ProxyIpPool
 
+from .cookies import cookie_dict_to_str, merge_cookie_dict, persist_xhs_cookies
 from .exception import (
+    CookieExpiredError,
     DataFetchError,
     IPBlockError,
     NoteNotFoundError,
@@ -63,6 +65,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         playwright_page: Any = None,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        persist_cookies: bool = True,
     ):
         self.proxy = proxy
         self.timeout = timeout
@@ -82,9 +85,42 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         self.NOTE_ABNORMAL_CODE = -510001
         self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
+        self.persist_cookies = persist_cookies
         self._extractor = XiaoHongShuExtractor()
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+
+    def _apply_response_cookies(self, response: httpx.Response) -> bool:
+        """Merge Set-Cookie into in-memory jar and optionally persist to disk."""
+        if not response.cookies:
+            return False
+        updates = {name: value for name, value in response.cookies.items()}
+        merged, changed = merge_cookie_dict(self.cookie_dict, updates)
+        if not changed:
+            return False
+        self.cookie_dict = merged
+        cookie_str = cookie_dict_to_str(self.cookie_dict)
+        self.headers["Cookie"] = cookie_str
+        utils.logger.info(
+            "[XiaoHongShuClient] refreshed cookies from Set-Cookie: %s",
+            ", ".join(sorted(updates.keys())),
+        )
+        if self.persist_cookies:
+            persist_xhs_cookies(cookie_str)
+        return True
+
+    @staticmethod
+    def _is_login_expired_payload(data: Optional[Dict]) -> bool:
+        if not isinstance(data, dict):
+            return False
+        msg = str(data.get("msg") or data.get("message") or "")
+        markers = ("登录已过期", "未登录", "请登录", "登录失效", "login", "not login")
+        lower = msg.lower()
+        if any(marker.lower() in lower for marker in markers):
+            return True
+        # Common XHS auth failure codes observed in the wild.
+        code = data.get("code")
+        return code in {10000, -100, 300015}
 
     async def _pre_headers(self, url: str, params: Optional[Dict] = None, payload: Optional[Dict] = None) -> Dict:
         """请求头参数签名 (使用 xhshow 纯算法)
@@ -127,7 +163,12 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         stop=stop_after_attempt(3),
         wait=wait_fixed(1),
         retry=retry_if_not_exception_type(
-            (NoteNotFoundError, IPBlockError, PlatformAccessError)
+            (
+                NoteNotFoundError,
+                IPBlockError,
+                PlatformAccessError,
+                CookieExpiredError,
+            )
         ),
     )
     async def request(self, method, url, **kwargs) -> Union[str, Any]:
@@ -149,7 +190,14 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         async with make_async_client(proxy=self.proxy) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
 
-        if response.status_code in {401, 403, 429}:
+        # Keep local jar in sync with server-side cookie rotation.
+        self._apply_response_cookies(response)
+
+        if response.status_code == 401:
+            raise CookieExpiredError(
+                f"XHS cookie expired or invalid (HTTP {response.status_code})"
+            )
+        if response.status_code in {403, 429}:
             raise PlatformAccessError(
                 f"XHS request blocked with HTTP {response.status_code}"
             )
@@ -160,7 +208,7 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             verify_uuid = response.headers["Verifyuuid"]
             msg = f"CAPTCHA appeared, request failed, Verifytype: {verify_type}, Verifyuuid: {verify_uuid}, Response: {response}"
             utils.logger.error(msg)
-            raise Exception(msg)
+            raise PlatformAccessError(msg)
 
         response_data: Optional[Dict] = None
         try:
@@ -181,6 +229,12 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             raise PlatformAccessError(
                 f"XHS account security restriction, code: {self.SECURITY_LIMIT_CODE}"
             )
+        if self._is_login_expired_payload(response_data):
+            raise CookieExpiredError(
+                response_data.get("msg")
+                or response_data.get("message")
+                or "XHS cookie expired"
+            )
 
         if return_response:
             return response.text
@@ -190,6 +244,8 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         # IP_ERROR_CODE / SECURITY_LIMIT_CODE are already handled above, before return_response.
         elif data["code"] in (self.NOTE_NOT_FOUND_CODE, self.NOTE_ABNORMAL_CODE):
             raise NoteNotFoundError(f"Note not found or abnormal, code: {data['code']}")
+        elif self._is_login_expired_payload(data):
+            raise CookieExpiredError(data.get("msg") or "XHS cookie expired")
         else:
             err_msg = data.get("msg", None) or f"{response.text}"
             raise DataFetchError(err_msg)
@@ -255,8 +311,11 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         headers = await self._pre_headers(uri, params={})
         async with make_async_client(proxy=self.proxy) as client:
             response = await client.get(f"{self._host}{uri}", headers=headers)
+            self._apply_response_cookies(response)
             if response.status_code == 200:
                 return response.json()
+            if response.status_code == 401:
+                raise CookieExpiredError("XHS cookie expired while querying selfinfo")
         return None
 
     async def pong(self) -> bool:
@@ -271,6 +330,12 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             self_info: Dict = await self.query_self()
             if self_info and self_info.get("data", {}).get("result", {}).get("success"):
                 ping_flag = True
+            elif self_info and self._is_login_expired_payload(self_info):
+                raise CookieExpiredError(
+                    self_info.get("msg") or self_info.get("message") or "XHS cookie expired"
+                )
+        except CookieExpiredError:
+            raise
         except Exception as e:
             utils.logger.error(
                 f"[XiaoHongShuClient.pong] Check login state failed: {e}, and try to login again..."
@@ -294,6 +359,8 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         )
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
+        if self.persist_cookies:
+            persist_xhs_cookies(cookie_str)
 
     async def get_note_by_keyword(
         self,

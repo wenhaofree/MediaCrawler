@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import random
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
@@ -15,7 +15,18 @@ from pydantic import BaseModel, Field
 
 import config
 from media_platform.xhs.client import XiaoHongShuClient
-from media_platform.xhs.exception import DataFetchError, IPBlockError, PlatformAccessError
+from media_platform.xhs.cookies import (
+    cookie_update_hint,
+    looks_like_xhs_cookies,
+    persist_xhs_cookies,
+    resolve_xhs_cookies,
+)
+from media_platform.xhs.exception import (
+    CookieExpiredError,
+    DataFetchError,
+    IPBlockError,
+    PlatformAccessError,
+)
 from media_platform.xhs.help import parse_creator_info_from_url
 from store import xhs as xhs_store
 from tools import utils
@@ -41,50 +52,49 @@ class AddCreatorRequest(BaseModel):
     )
     cookies: Optional[str] = Field(
         default=None,
-        description="自定义 Cookies（可选；未提供时优先使用 .env 的 XHS_COOKIES）",
+        description=(
+            "自定义 Cookies（可选；未提供时优先热读 Cookie 文件，其次 .env 的 XHS_COOKIES）"
+        ),
     )
 
 
-def _looks_like_xhs_cookies(cookie_str: str) -> bool:
-    lower = cookie_str.lower()
-    return "a1=" in lower or "web_session=" in lower
+# Backwards-compatible aliases for existing unit tests.
+_looks_like_xhs_cookies = looks_like_xhs_cookies
+_resolve_xhs_cookies = resolve_xhs_cookies
 
 
-def _resolve_xhs_cookies(cookies_str: Optional[str] = None) -> str:
-    """
-    Priority:
-    1) request body cookies
-    2) XHS_COOKIES from env / config
-    3) config.COOKIES only when it looks like Xiaohongshu cookies
-    """
-    request_cookies = (cookies_str or "").strip()
-    if request_cookies:
-        return request_cookies
+def _request_interval_sec() -> float:
+    low = float(getattr(config, "XHS_REQUEST_INTERVAL_MIN_SEC", 8.0) or 8.0)
+    high = float(getattr(config, "XHS_REQUEST_INTERVAL_MAX_SEC", 15.0) or 15.0)
+    if high < low:
+        high = low
+    return random.uniform(low, high)
 
-    xhs_cookies = (
-        getattr(config, "XHS_COOKIES", None) or os.getenv("XHS_COOKIES") or ""
-    ).strip()
-    if xhs_cookies:
-        return xhs_cookies
 
-    fallback = (config.COOKIES or "").strip()
-    if fallback and _looks_like_xhs_cookies(fallback):
-        return fallback
-    return ""
+async def _wait_between_requests(reason: str) -> None:
+    seconds = _request_interval_sec()
+    await asyncio.sleep(seconds)
+    utils.logger.info("[api.xhs] slept %.1fs %s", seconds, reason)
 
 
 def _get_xhs_client(cookies_str: Optional[str] = None) -> XiaoHongShuClient:
-    cookie_str = _resolve_xhs_cookies(cookies_str)
-    if not cookie_str or not _looks_like_xhs_cookies(cookie_str):
+    cookie_str = resolve_xhs_cookies(cookies_str)
+    if not cookie_str or not looks_like_xhs_cookies(cookie_str):
         raise HTTPException(
             status_code=400,
             detail=(
-                "未找到有效的小红书 Cookie。请在 .env 配置 XHS_COOKIES"
-                "（通常包含 a1 / web_session），或在请求体传入 cookies。"
+                "未找到有效的小红书 Cookie。"
+                "请写入 ./secrets/xhs_cookies（热加载，无需重建容器），"
+                "或在 .env 配置 XHS_COOKIES（通常包含 a1 / web_session），"
+                "或在请求体传入 cookies。"
             ),
         )
     cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
-    domain = "https://www.rednote.com" if getattr(config, "XHS_INTERNATIONAL", False) else "https://www.xiaohongshu.com"
+    domain = (
+        "https://www.rednote.com"
+        if getattr(config, "XHS_INTERNATIONAL", False)
+        else "https://www.xiaohongshu.com"
+    )
     headers = {
         "accept": "application/json, text/plain, */*",
         "accept-language": "zh-CN,zh;q=0.9",
@@ -110,11 +120,62 @@ def _get_xhs_client(cookies_str: Optional[str] = None) -> XiaoHongShuClient:
         headers=headers,
         playwright_page=None,
         cookie_dict=cookie_dict,
+        persist_cookies=True,
     )
 
 
 def _profile_from_creator(creator: Dict[str, Any]) -> Dict[str, Any]:
     return creator.get("basic_info") or creator.get("basicInfo") or creator or {}
+
+
+def _cookie_expired_http_detail(exc: Optional[BaseException] = None) -> str:
+    suffix = f"（{exc}）" if exc else ""
+    return f"小红书 Cookie 无效或已过期{suffix}。{cookie_update_hint()}"
+
+
+@router.get("/cookie/status")
+async def xhs_cookie_status():
+    """Probe whether the currently resolved Cookie is still valid."""
+    cookie_str = resolve_xhs_cookies()
+    if not cookie_str or not looks_like_xhs_cookies(cookie_str):
+        return {
+            "code": 400,
+            "message": "未配置有效 Cookie",
+            "data": {"valid": False, "hint": cookie_update_hint()},
+        }
+
+    client = _get_xhs_client()
+    try:
+        valid = await client.pong()
+    except CookieExpiredError as exc:
+        return {
+            "code": 401,
+            "message": _cookie_expired_http_detail(exc),
+            "data": {"valid": False, "reason": "cookie_expired"},
+        }
+    except PlatformAccessError as exc:
+        return {
+            "code": 403,
+            "message": f"小红书访问受限: {exc}",
+            "data": {"valid": False, "reason": "access_restricted"},
+        }
+    except Exception as exc:
+        return {
+            "code": 502,
+            "message": f"Cookie 检测异常: {exc}",
+            "data": {"valid": False, "reason": "probe_failed"},
+        }
+
+    # Persist any Set-Cookie rotation observed during the probe.
+    persist_xhs_cookies(client.headers.get("Cookie", ""))
+    return {
+        "code": 200,
+        "message": "Cookie 有效" if valid else "Cookie 无效或已过期",
+        "data": {
+            "valid": bool(valid),
+            "hint": None if valid else cookie_update_hint(),
+        },
+    }
 
 
 @router.post("/creator/add")
@@ -127,11 +188,19 @@ async def add_xhs_creator(req: AddCreatorRequest):
     crawler_type_var.set("api_add")
     reset_xhs_creator_stats_seen()
 
-    if not await client.pong():
+    try:
+        if not await client.pong():
+            raise HTTPException(status_code=401, detail=_cookie_expired_http_detail())
+    except CookieExpiredError as exc:
+        raise HTTPException(status_code=401, detail=_cookie_expired_http_detail(exc)) from exc
+    except PlatformAccessError as exc:
         raise HTTPException(
-            status_code=401,
-            detail="小红书 Cookie 无效或已过期，请更新 .env 中的 XHS_COOKIES 后重试",
-        )
+            status_code=403,
+            detail=(
+                f"小红书访问受限（风控/限流）: {exc}。"
+                "请降低采集频率后重试；频繁重试会加速 Cookie 失效。"
+            ),
+        ) from exc
 
     try:
         creator_info_parsed = parse_creator_info_from_url(req.url.strip())
@@ -141,14 +210,24 @@ async def add_xhs_creator(req: AddCreatorRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"无法解析小红书账号信息: {exc}") from exc
 
+    await _wait_between_requests("before get_creator_info")
+
     try:
         creator_res: Dict[str, Any] = await client.get_creator_info(
             user_id=user_id,
             xsec_token=xsec_token,
             xsec_source=xsec_source,
         )
+    except CookieExpiredError as exc:
+        raise HTTPException(status_code=401, detail=_cookie_expired_http_detail(exc)) from exc
     except (IPBlockError, PlatformAccessError) as exc:
-        raise HTTPException(status_code=403, detail=f"小红书访问受限: {exc}") from exc
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"小红书访问受限: {exc}。"
+                "请拉长 XHS_REQUEST_INTERVAL_* 并避免短时间重复采集。"
+            ),
+        ) from exc
     except DataFetchError as exc:
         raise HTTPException(status_code=502, detail=f"调用小红书博主接口失败: {exc}") from exc
     except Exception as exc:
@@ -169,6 +248,7 @@ async def add_xhs_creator(req: AddCreatorRequest):
     saved_posts_count = 0
     if req.fetch_posts:
         try:
+            await _wait_between_requests("before get_notes_by_creator")
             notes_res = await client.get_notes_by_creator(
                 creator=user_id,
                 cursor="",
@@ -184,6 +264,7 @@ async def add_xhs_creator(req: AddCreatorRequest):
                 note_token = note_item.get("xsec_token") or xsec_token
                 note_source = note_item.get("xsec_source") or xsec_source or "pc_feed"
                 try:
+                    await _wait_between_requests(f"before note detail {note_id}")
                     note_detail = await client.get_note_by_id(
                         note_id=note_id,
                         xsec_source=note_source,
@@ -195,13 +276,31 @@ async def add_xhs_creator(req: AddCreatorRequest):
                         )
                         await xhs_store.update_xhs_note(note_detail)
                         saved_posts_count += 1
+                except CookieExpiredError as exc:
+                    utils.logger.error(
+                        "[api.add_xhs_creator] cookie expired while fetching notes: %s", exc
+                    )
+                    raise HTTPException(
+                        status_code=401, detail=_cookie_expired_http_detail(exc)
+                    ) from exc
+                except PlatformAccessError as exc:
+                    utils.logger.warning(
+                        "[api.add_xhs_creator] access restricted on note %s: %s",
+                        note_id,
+                        exc,
+                    )
+                    break
                 except Exception as exc:
                     utils.logger.warning(
                         f"[api.add_xhs_creator] fetch note {note_id} failed: {exc}"
                     )
-                await asyncio.sleep(getattr(config, "CRAWLER_MAX_SLEEP_SEC", 1))
+        except HTTPException:
+            raise
         except Exception as exc:
             utils.logger.warning(f"[api.add_xhs_creator] 拉取笔记入库异常: {exc}")
+
+    # Keep refreshed Set-Cookie (web_session / a1 / websectiga ...) for next request.
+    persist_xhs_cookies(client.headers.get("Cookie", ""))
 
     profile = _profile_from_creator(creator_res)
     interaction_counts = {

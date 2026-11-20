@@ -222,6 +222,7 @@ async def test_xhs_update_cookies_only_reads_xhs_domains():
         headers={},
         playwright_page=FakePage(),
         cookie_dict={},
+        persist_cookies=False,
     )
 
     await client.update_cookies(browser_context)
@@ -238,6 +239,10 @@ async def test_xhs_update_cookies_only_reads_xhs_domains():
 async def test_xhs_create_client_uses_configured_cookie_without_browser(monkeypatch):
     crawler = XiaoHongShuCrawler()
     crawler.ip_proxy_pool = None
+    monkeypatch.setattr(
+        "media_platform.xhs.core.resolve_xhs_cookies",
+        lambda cookies_str=None: "a1=cookie-a1; web_session=cookie-session",
+    )
     monkeypatch.setattr(config, "COOKIES", "a1=cookie-a1; web_session=cookie-session")
 
     client = await crawler.create_xhs_client(httpx_proxy=None)
@@ -253,6 +258,10 @@ async def test_xhs_start_uses_pure_api_without_browser(monkeypatch):
     client = type("Client", (), {"pong": AsyncMock(return_value=True)})()
     collect_creators = AsyncMock()
 
+    monkeypatch.setattr(
+        "media_platform.xhs.core.resolve_xhs_cookies",
+        lambda cookies_str=None: "a1=cookie-a1",
+    )
     monkeypatch.setattr(config, "COOKIES", "a1=cookie-a1")
     monkeypatch.setattr(config, "CRAWLER_TYPE", "creator")
     monkeypatch.setattr(config, "XHS_SAFE_MODE", False)
@@ -261,7 +270,9 @@ async def test_xhs_start_uses_pure_api_without_browser(monkeypatch):
 
     await crawler.start()
 
-    crawler.create_xhs_client.assert_awaited_once_with(None)
+    crawler.create_xhs_client.assert_awaited_once()
+    assert crawler.create_xhs_client.await_args.args == (None,)
+    assert crawler.create_xhs_client.await_args.kwargs.get("cookie_str") == "a1=cookie-a1"
     client.pong.assert_awaited_once()
     collect_creators.assert_awaited_once()
     assert not hasattr(crawler, "browser_context")
@@ -271,6 +282,10 @@ async def test_xhs_start_uses_pure_api_without_browser(monkeypatch):
 async def test_xhs_creator_start_rejects_an_empty_creator_list(monkeypatch):
     crawler = XiaoHongShuCrawler()
 
+    monkeypatch.setattr(
+        "media_platform.xhs.core.resolve_xhs_cookies",
+        lambda cookies_str=None: "a1=cookie-a1",
+    )
     monkeypatch.setattr(config, "COOKIES", "a1=cookie-a1")
     monkeypatch.setattr(config, "CRAWLER_TYPE", "creator")
     monkeypatch.setattr(config, "XHS_CREATOR_ID_LIST", [])

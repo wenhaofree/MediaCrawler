@@ -35,7 +35,9 @@ from var import crawler_type_var, reset_xhs_creator_stats_seen, source_keyword_v
 
 from . import media as xhs_media
 from .client import XiaoHongShuClient
+from .cookies import resolve_xhs_cookies
 from .exception import (
+    CookieExpiredError,
     DataFetchError,
     IPBlockError,
     NoteNotFoundError,
@@ -96,13 +98,24 @@ class XiaoHongShuCrawler(AbstractCrawler):
             ip_proxy_info: IpInfoModel = await self.ip_proxy_pool.get_proxy()
             _, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
 
-        if not config.COOKIES.strip():
-            raise RuntimeError("XHS pure API requires a non-empty XHS_COOKIES value")
+        cookie_str = resolve_xhs_cookies() or config.COOKIES.strip()
+        if not cookie_str:
+            raise RuntimeError(
+                "XHS pure API requires cookies via ./secrets/xhs_cookies or XHS_COOKIES"
+            )
         if config.CRAWLER_TYPE == "creator" and not config.XHS_CREATOR_ID_LIST:
             raise RuntimeError("XHS creator crawl requires XHS_CREATOR_IDS or --creator_id")
-        self.xhs_client = await self.create_xhs_client(httpx_proxy_format)
-        if not await self.xhs_client.pong():
-            raise RuntimeError("XHS Cookie is invalid or expired; stop without browser fallback")
+        self.xhs_client = await self.create_xhs_client(httpx_proxy_format, cookie_str=cookie_str)
+        try:
+            if not await self.xhs_client.pong():
+                raise RuntimeError(
+                    "XHS Cookie is invalid or expired; update ./secrets/xhs_cookies "
+                    "(hot reload, no container recreate) and retry"
+                )
+        except CookieExpiredError as exc:
+            raise RuntimeError(
+                f"XHS Cookie expired: {exc}; update ./secrets/xhs_cookies and retry"
+            ) from exc
 
         crawler_type_var.set(config.CRAWLER_TYPE)
         if config.CRAWLER_TYPE == "search":
@@ -358,10 +371,12 @@ class XiaoHongShuCrawler(AbstractCrawler):
             # Sleep after fetching comments
             await self._wait_between_requests(f"after comments for note {note_id}")
 
-    async def create_xhs_client(self, httpx_proxy: Optional[str]) -> XiaoHongShuClient:
+    async def create_xhs_client(
+        self, httpx_proxy: Optional[str], cookie_str: Optional[str] = None
+    ) -> XiaoHongShuClient:
         """Create Xiaohongshu client"""
         utils.logger.info("[XiaoHongShuCrawler.create_xhs_client] Begin create Xiaohongshu API client ...")
-        cookie_str = config.COOKIES.strip()
+        cookie_str = (cookie_str or resolve_xhs_cookies() or config.COOKIES).strip()
         cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
         xhs_client_obj = XiaoHongShuClient(
             proxy=httpx_proxy,
@@ -386,6 +401,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             playwright_page=None,
             cookie_dict=cookie_dict,
             proxy_ip_pool=self.ip_proxy_pool,  # Pass proxy pool for automatic refresh
+            persist_cookies=True,
         )
         return xhs_client_obj
 

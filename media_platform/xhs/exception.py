@@ -33,5 +33,9 @@ class PlatformAccessError(RequestError):
     """authentication, rate-limit, or account-security restriction"""
 
 
+class CookieExpiredError(PlatformAccessError):
+    """Cookie / login session is invalid or expired"""
+
+
 class NoteNotFoundError(RequestError):
     """Note does not exist or is abnormal"""

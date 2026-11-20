@@ -124,6 +124,8 @@ services:
       CRAWLER_PLATFORM: xhs
       CRAWLER_COOKIES: "${XHS_COOKIES:-}"
       XHS_COOKIES: "${XHS_COOKIES:-}"
+      XHS_COOKIES_FILE: "${XHS_COOKIES_FILE:-/run/secrets/xhs_cookies}"
+      XHS_COOKIES_RUNTIME_FILE: "${XHS_COOKIES_RUNTIME_FILE:-/app/data/xhs_cookies}"
       XHS_CREATOR_IDS: "${XHS_CREATOR_IDS:-}"
       CRAWLER_LOGIN_TYPE: cookie
       ENABLE_PURE_API_MODE: "true"
@@ -141,6 +143,9 @@ services:
       - ./data/xhs:/app/data
       - ./.env:/app/.env:ro
       - ./config/base_config.py:/app/config/base_config.py:ro
+      # Rotate xhs_cookies atomically on the host; the app re-reads it per request.
+      # Set-Cookie refreshes are written to ./data/xhs/xhs_cookies (runtime cache).
+      - ${XHS_SECRET_DIR_HOST:-./secrets}:/run/secrets:ro
     networks:
       - wenhao-services
 
