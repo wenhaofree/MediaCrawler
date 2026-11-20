@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import BackgroundTasks
 
 from api.routers import xhs as xhs_api
 
@@ -46,6 +47,7 @@ async def test_add_xhs_creator_rejects_missing_cookies(monkeypatch, tmp_path):
 
     with pytest.raises(xhs_api.HTTPException) as exc:
         await xhs_api.add_xhs_creator(
-            xhs_api.AddCreatorRequest(url="5eb8e1d400000000010075ae")
+            xhs_api.AddCreatorRequest(url="5eb8e1d400000000010075ae"),
+            BackgroundTasks(),
         )
     assert exc.value.status_code == 400

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import random
-from typing import Any, Dict, Optional
+import time
+from typing import Any, Dict, Optional, Set
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 import config
@@ -33,6 +34,10 @@ from tools import utils
 from var import crawler_type_var, reset_xhs_creator_stats_seen
 
 router = APIRouter(prefix="/xhs", tags=["xhs"])
+
+# Prevent duplicate in-flight background note fetches for the same creator.
+_posts_fetch_inflight: Set[str] = set()
+_posts_fetch_lock = asyncio.Lock()
 
 
 class AddCreatorRequest(BaseModel):
@@ -63,16 +68,17 @@ _looks_like_xhs_cookies = looks_like_xhs_cookies
 _resolve_xhs_cookies = resolve_xhs_cookies
 
 
-def _request_interval_sec() -> float:
-    low = float(getattr(config, "XHS_REQUEST_INTERVAL_MIN_SEC", 8.0) or 8.0)
-    high = float(getattr(config, "XHS_REQUEST_INTERVAL_MAX_SEC", 15.0) or 15.0)
+def _api_request_interval_sec() -> float:
+    """Shorter gaps for interactive HTTP APIs (avoid gateway/browser 504)."""
+    low = float(getattr(config, "XHS_API_REQUEST_INTERVAL_MIN_SEC", 2.0) or 2.0)
+    high = float(getattr(config, "XHS_API_REQUEST_INTERVAL_MAX_SEC", 4.0) or 4.0)
     if high < low:
         high = low
     return random.uniform(low, high)
 
 
 async def _wait_between_requests(reason: str) -> None:
-    seconds = _request_interval_sec()
+    seconds = _api_request_interval_sec()
     await asyncio.sleep(seconds)
     utils.logger.info("[api.xhs] slept %.1fs %s", seconds, reason)
 
@@ -245,12 +251,93 @@ async def xhs_cookie_status():
         }
 
 
+async def _fetch_creator_posts_background(
+    *,
+    user_id: str,
+    max_posts: int,
+    xsec_token: str,
+    xsec_source: str,
+    cookies_str: str,
+) -> None:
+    """Slowly pull recent notes after the HTTP response has already returned."""
+    saved = 0
+    try:
+        crawler_type_var.set("api_add_bg")
+        reset_xhs_creator_stats_seen()
+        client = _get_xhs_client(cookies_str)
+        await _wait_between_requests(f"bg before notes list {user_id}")
+        notes_res = await client.get_notes_by_creator(
+            creator=user_id,
+            cursor="",
+            page_size=min(max_posts, 30),
+            xsec_token=xsec_token,
+            xsec_source=xsec_source or "pc_feed",
+        )
+        notes = (notes_res or {}).get("notes") or []
+        for note_item in notes[:max_posts]:
+            note_id = note_item.get("note_id")
+            if not note_id:
+                continue
+            note_token = note_item.get("xsec_token") or xsec_token
+            note_source = note_item.get("xsec_source") or xsec_source or "pc_feed"
+            try:
+                await _wait_between_requests(f"bg before note detail {note_id}")
+                note_detail = await client.get_note_by_id(
+                    note_id=note_id,
+                    xsec_source=note_source,
+                    xsec_token=note_token,
+                )
+                if note_detail:
+                    note_detail.update(
+                        {"xsec_token": note_token, "xsec_source": note_source}
+                    )
+                    await xhs_store.update_xhs_note(note_detail)
+                    saved += 1
+            except CookieExpiredError as exc:
+                utils.logger.error(
+                    "[api.add_xhs_creator] bg cookie expired for %s: %s", user_id, exc
+                )
+                break
+            except PlatformAccessError as exc:
+                utils.logger.warning(
+                    "[api.add_xhs_creator] bg access restricted on %s note %s: %s",
+                    user_id,
+                    note_id,
+                    exc,
+                )
+                break
+            except Exception as exc:
+                utils.logger.warning(
+                    "[api.add_xhs_creator] bg fetch note %s failed: %s", note_id, exc
+                )
+        persist_xhs_cookies(client.headers.get("Cookie", ""))
+        utils.logger.info(
+            "[api.add_xhs_creator] background posts done user_id=%s saved=%s",
+            user_id,
+            saved,
+        )
+    except Exception as exc:
+        utils.logger.exception(
+            "[api.add_xhs_creator] background posts failed user_id=%s: %s", user_id, exc
+        )
+    finally:
+        async with _posts_fetch_lock:
+            _posts_fetch_inflight.discard(user_id)
+
+
 @router.post("/creator/add")
-async def add_xhs_creator(req: AddCreatorRequest):
+async def add_xhs_creator(req: AddCreatorRequest, background_tasks: BackgroundTasks):
     """
-    接收小红书主页链接或 user_id，解析博主资料并入库 xhs_creator；
-    可选拉取近期笔记详情写入 xhs_note（及对应 stats）。
+    接收小红书主页链接或 user_id，解析博主资料并入库 xhs_creator。
+
+    账号入库成功后立即返回；若 fetch_posts=true，笔记在后台慢慢拉取入库，
+    避免客户端 / 网关超时出现「504 但账号已入库」。
+
+    路径 / 请求体未变：POST /api/xhs/creator/add
+    {url, fetch_posts?, max_posts?, cookies?}
     """
+    started_at = time.monotonic()
+
     client = _get_xhs_client(req.cookies)
     crawler_type_var.set("api_add")
     reset_xhs_creator_stats_seen()
@@ -277,7 +364,8 @@ async def add_xhs_creator(req: AddCreatorRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"无法解析小红书账号信息: {exc}") from exc
 
-    await _wait_between_requests("before get_creator_info")
+    # Short pause after pong (full crawler 8–15s gaps are too long for HTTP clients).
+    await asyncio.sleep(1.0)
 
     try:
         creator_res: Dict[str, Any] = await client.get_creator_info(
@@ -312,62 +400,28 @@ async def add_xhs_creator(req: AddCreatorRequest):
         utils.logger.error(f"[api.add_xhs_creator] save_creator error: {exc}")
         raise HTTPException(status_code=500, detail=f"保存创作者信息到数据库失败: {exc}") from exc
 
-    saved_posts_count = 0
+    # Persist any Set-Cookie rotation from pong / creator fetch before returning.
+    refreshed_cookies = client.headers.get("Cookie", "") or resolve_xhs_cookies(req.cookies)
+    persist_xhs_cookies(refreshed_cookies)
+
+    posts_status = "skipped"
     if req.fetch_posts:
-        try:
-            await _wait_between_requests("before get_notes_by_creator")
-            notes_res = await client.get_notes_by_creator(
-                creator=user_id,
-                cursor="",
-                page_size=min(req.max_posts, 30),
+        async with _posts_fetch_lock:
+            already = user_id in _posts_fetch_inflight
+            if not already:
+                _posts_fetch_inflight.add(user_id)
+        if already:
+            posts_status = "already_running"
+        else:
+            posts_status = "queued"
+            background_tasks.add_task(
+                _fetch_creator_posts_background,
+                user_id=user_id,
+                max_posts=req.max_posts,
                 xsec_token=xsec_token,
                 xsec_source=xsec_source or "pc_feed",
+                cookies_str=refreshed_cookies,
             )
-            notes = (notes_res or {}).get("notes") or []
-            for note_item in notes[: req.max_posts]:
-                note_id = note_item.get("note_id")
-                if not note_id:
-                    continue
-                note_token = note_item.get("xsec_token") or xsec_token
-                note_source = note_item.get("xsec_source") or xsec_source or "pc_feed"
-                try:
-                    await _wait_between_requests(f"before note detail {note_id}")
-                    note_detail = await client.get_note_by_id(
-                        note_id=note_id,
-                        xsec_source=note_source,
-                        xsec_token=note_token,
-                    )
-                    if note_detail:
-                        note_detail.update(
-                            {"xsec_token": note_token, "xsec_source": note_source}
-                        )
-                        await xhs_store.update_xhs_note(note_detail)
-                        saved_posts_count += 1
-                except CookieExpiredError as exc:
-                    utils.logger.error(
-                        "[api.add_xhs_creator] cookie expired while fetching notes: %s", exc
-                    )
-                    raise HTTPException(
-                        status_code=401, detail=_cookie_expired_http_detail(exc)
-                    ) from exc
-                except PlatformAccessError as exc:
-                    utils.logger.warning(
-                        "[api.add_xhs_creator] access restricted on note %s: %s",
-                        note_id,
-                        exc,
-                    )
-                    break
-                except Exception as exc:
-                    utils.logger.warning(
-                        f"[api.add_xhs_creator] fetch note {note_id} failed: {exc}"
-                    )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            utils.logger.warning(f"[api.add_xhs_creator] 拉取笔记入库异常: {exc}")
-
-    # Keep refreshed Set-Cookie (web_session / a1 / websectiga ...) for next request.
-    persist_xhs_cookies(client.headers.get("Cookie", ""))
 
     profile = _profile_from_creator(creator_res)
     interaction_counts = {
@@ -379,9 +433,16 @@ async def add_xhs_creator(req: AddCreatorRequest):
     if isinstance(avatar, list):
         avatar = avatar[0] if avatar else ""
 
+    if posts_status == "queued":
+        message = "小红书账号已入库；笔记将在后台慢慢拉取"
+    elif posts_status == "already_running":
+        message = "小红书账号已入库；该账号笔记后台任务已在进行中"
+    else:
+        message = "小红书账号信息解析并入库成功"
+
     return {
         "code": 200,
-        "message": "小红书账号信息解析并入库成功",
+        "message": message,
         "data": {
             "user_id": user_id,
             "nickname": profile.get("nickname"),
@@ -398,6 +459,10 @@ async def add_xhs_creator(req: AddCreatorRequest):
                 f"https://www.xiaohongshu.com/user/profile/{user_id}"
                 + (f"?xsec_token={xsec_token}&xsec_source={xsec_source}" if xsec_token else "")
             ),
-            "posts_saved_count": saved_posts_count,
+            # posts are fetched asynchronously when fetch_posts=true
+            "posts_saved_count": 0,
+            "posts_status": posts_status,
+            "posts_max": req.max_posts if req.fetch_posts else 0,
+            "elapsed_sec": round(time.monotonic() - started_at, 2),
         },
     }

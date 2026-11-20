@@ -67,3 +67,17 @@ XHS_REQUEST_INTERVAL_MAX_SEC = max(
     XHS_REQUEST_INTERVAL_MIN_SEC,
     _env_number("XHS_REQUEST_INTERVAL_MAX_SEC", 15.0),
 )
+# Interactive API (/api/xhs/creator/add) uses shorter gaps so reverse proxies / browsers
+# (often 30–60s) do not return 504 after the creator row was already saved.
+XHS_API_REQUEST_INTERVAL_MIN_SEC = max(
+    0.5, _env_number("XHS_API_REQUEST_INTERVAL_MIN_SEC", 2.0)
+)
+XHS_API_REQUEST_INTERVAL_MAX_SEC = max(
+    XHS_API_REQUEST_INTERVAL_MIN_SEC,
+    _env_number("XHS_API_REQUEST_INTERVAL_MAX_SEC", 4.0),
+)
+# Kept for backward-compatible env files; creator/add now returns after account save
+# and fetches notes in a BackgroundTask (see api/routers/xhs.py).
+XHS_API_ADD_SOFT_TIMEOUT_SEC = max(
+    15.0, _env_number("XHS_API_ADD_SOFT_TIMEOUT_SEC", 50.0)
+)

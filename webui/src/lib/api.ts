@@ -2,7 +2,8 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  // XHS creator/add may fetch notes with polite gaps; 30s caused false 504 while DB already saved.
+  timeout: 90000,
   headers: {
     'Content-Type': 'application/json',
   },
