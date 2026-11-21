@@ -302,6 +302,41 @@ async def test_bilibili_scheduled_task_uses_pure_api_and_snapshot_slot(tmp_path,
 
 
 @pytest.mark.asyncio
+async def test_load_bilibili_creator_ids_from_db_only_returns_monitored(tmp_path, monkeypatch):
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import StaticPool
+
+    import config
+    from database import db_session
+    from database.models import Base, BilibiliUpInfo
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+    monkeypatch.setattr(db_session, "get_async_engine", lambda *args, **kwargs: engine)
+    monkeypatch.setattr(config, "SAVE_DATA_OPTION", "db")
+    monkeypatch.setenv("BILI_SCHEDULE_SAVE_OPTION", "db")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with db_session.get_session() as session:
+        session.add_all(
+            [
+                BilibiliUpInfo(user_id=20813884, nickname="monitored-1", is_monitored=1),
+                BilibiliUpInfo(user_id=99999999, nickname="collab-unmonitored", is_monitored=0),
+                BilibiliUpInfo(user_id=520819684, nickname="monitored-2", is_monitored=1),
+            ]
+        )
+        await session.commit()
+
+    service = await _build_service(tmp_path, monkeypatch)
+    creators = await service._load_bilibili_creator_ids_from_db()
+    assert creators == ["20813884", "520819684"]
+
+    await service.shutdown()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_delete_task_removes_queued_run_requests(tmp_path, monkeypatch):
     service = await _build_service(tmp_path, monkeypatch)
     payload = ScheduledTaskUpsertRequest(

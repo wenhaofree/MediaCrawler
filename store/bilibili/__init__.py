@@ -138,6 +138,7 @@ async def save_creator(
         "total_liked": likes,
         "user_rank": level_info.get("current_level", creator_info.get("level")),
         "is_official": official.get("type"),
+        "is_monitored": 1,
     }
     save_up_info = {key: value for key, value in save_up_info.items() if value is not None}
     utils.logger.info(f"[store.bilibili.save_creator] bilibili user_id:{user_id}")

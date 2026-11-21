@@ -72,6 +72,8 @@ class BilibiliCrawler(AbstractCrawler):
         self.cdp_manager = None
         self.ip_proxy_pool = None  # Proxy IP pool for automatic proxy refresh
         self._media_downloader: Optional[MediaDownloader] = None
+        self._expected_creator_id: Optional[int] = None
+        self._creator_profile_updated: bool = False
 
     async def start(self):
         reset_bili_creator_stats_seen()
@@ -457,20 +459,65 @@ class BilibiliCrawler(AbstractCrawler):
         """
         ps = 30
         pn = 1
-        while True:
-            if config.CRAWLER_MAX_PAGES > 0 and pn > config.CRAWLER_MAX_PAGES:
-                utils.logger.info(
-                    f"[BilibiliCrawler.get_creator_videos] Reached max creator pages limit: {config.CRAWLER_MAX_PAGES}"
-                )
-                break
-            result = await self.bili_client.get_creator_videos(creator_id, pn, ps)
-            video_bvids_list = [video["bvid"] for video in result["list"]["vlist"]]
-            await self.get_specified_videos(video_bvids_list)
-            if int(result["page"]["count"]) <= pn * ps:
-                break
-            await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
-            utils.logger.info(f"[BilibiliCrawler.get_creator_videos] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {pn}")
-            pn += 1
+        previous_expected = getattr(self, "_expected_creator_id", None)
+        self._expected_creator_id = creator_id
+        self._creator_profile_updated = False
+        try:
+            while True:
+                if config.CRAWLER_MAX_PAGES > 0 and pn > config.CRAWLER_MAX_PAGES:
+                    utils.logger.info(
+                        f"[BilibiliCrawler.get_creator_videos] Reached max creator pages limit: {config.CRAWLER_MAX_PAGES}"
+                    )
+                    break
+                result = await self.bili_client.get_creator_videos(creator_id, pn, ps)
+                video_bvids_list = [video["bvid"] for video in result["list"]["vlist"]]
+                await self.get_specified_videos(video_bvids_list)
+                if int(result["page"]["count"]) <= pn * ps:
+                    break
+                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                utils.logger.info(f"[BilibiliCrawler.get_creator_videos] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {pn}")
+                pn += 1
+
+            if not self._creator_profile_updated and hasattr(self.bili_client, "get_creator_info"):
+                await self._refresh_creator_profile_fallback(creator_id)
+        finally:
+            self._expected_creator_id = previous_expected
+
+    async def _refresh_creator_profile_fallback(self, creator_id: int) -> None:
+        """Fetch UP profile directly when creator videos are empty or all joint collabs."""
+        try:
+            creator_res = await self.bili_client.get_creator_info(creator_id)
+            if not creator_res or not (creator_res.get("mid") or creator_res.get("name")):
+                return
+            relation_stat = {}
+            up_stat = {}
+            if hasattr(self.bili_client, "get_creator_relation_stat"):
+                try:
+                    relation_stat = await self.bili_client.get_creator_relation_stat(creator_id) or {}
+                except Exception:
+                    pass
+            if hasattr(self.bili_client, "get_creator_up_stat"):
+                try:
+                    up_stat = await self.bili_client.get_creator_up_stat(creator_id) or {}
+                except Exception:
+                    pass
+            await bilibili_store.save_creator(
+                user_id=creator_id,
+                creator_info=creator_res,
+                relation_stat=relation_stat,
+                up_stat=up_stat,
+            )
+        except Exception as exc:
+            utils.logger.warning(
+                f"[BilibiliCrawler._refresh_creator_profile_fallback] failed for {creator_id}: {exc}"
+            )
+
+    @staticmethod
+    def _extract_video_owner_mid(video_detail: Dict) -> Optional[str]:
+        card = (video_detail.get("Card") or {}).get("card") or {}
+        owner = (video_detail.get("View") or {}).get("owner") or {}
+        mid = card.get("mid") or owner.get("mid")
+        return str(mid) if mid is not None else None
 
     async def get_specified_videos(self, video_url_list: List[str]):
         """
@@ -493,6 +540,7 @@ class BilibiliCrawler(AbstractCrawler):
         task_list = [self.get_video_info_task(aid=0, bvid=video_id, semaphore=semaphore) for video_id in bvids_list]
         video_details = await asyncio.gather(*task_list, return_exceptions=True)
         video_aids_list = []
+        expected_creator_id = getattr(self, "_expected_creator_id", None)
         for video_id, video_detail in zip(bvids_list, video_details):
             if isinstance(video_detail, Exception):
                 utils.logger.error(
@@ -505,7 +553,11 @@ class BilibiliCrawler(AbstractCrawler):
                 if video_aid:
                     video_aids_list.append(video_aid)
                 await bilibili_store.update_bilibili_video(video_detail)
-                await bilibili_store.update_up_info(video_detail)
+                owner_mid = self._extract_video_owner_mid(video_detail)
+                if expected_creator_id is None or owner_mid == str(expected_creator_id):
+                    await bilibili_store.update_up_info(video_detail)
+                    if expected_creator_id is not None:
+                        self._creator_profile_updated = True
                 await self.download_media(video_detail, semaphore)
         await self.batch_get_video_comments(video_aids_list)
 

@@ -74,7 +74,7 @@ services:
       POSTGRES_DB_PWD: ${POSTGRES_DB_PWD:-fuwenhao}
       POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-media_crawler}
       SAVE_DATA_OPTION: postgres
-      AUTO_INIT_DB: "false"
+      AUTO_INIT_DB: "${AUTO_INIT_DB:-true}"
       TZ: Asia/Shanghai
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
       CRAWLER_PLATFORM: bili

@@ -26,7 +26,7 @@
 from enum import Enum
 
 
-class SearchOrderType(Enum):
+class SearchOrderType(str, Enum):
     # Comprehensive sorting
     DEFAULT = ""
 

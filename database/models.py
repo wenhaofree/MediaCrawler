@@ -90,6 +90,7 @@ class BilibiliUpInfo(Base):
     total_liked = Column(Integer, comment='总获赞数')
     user_rank = Column(Integer, comment='用户等级')
     is_official = Column(Integer, comment='是否官方认证')
+    is_monitored = Column(Integer, default=0, server_default='0', index=True, comment='是否纳入定时监控(1=监控,0=仅附带作者)')
 
 
 class BilibiliUpStats(Base):

@@ -629,6 +629,7 @@ class ScheduledTaskService:
                 result = await session.execute(
                     select(BilibiliUpInfo.user_id)
                     .where(BilibiliUpInfo.user_id.is_not(None))
+                    .where(BilibiliUpInfo.is_monitored == 1)
                     .order_by(BilibiliUpInfo.id.asc())
                 )
                 return list(dict.fromkeys(str(row[0]).strip() for row in result.all() if row[0] is not None))

@@ -25,6 +25,7 @@
 # Reverse engineering implementation reference: https://socialsisteryi.github.io/bilibili-API-collect/docs/misc/sign/wbi.html#wbi%E7%AD%BE%E5%90%8D%E7%AE%97%E6%B3%95
 import re
 import urllib.parse
+from enum import Enum
 from hashlib import md5
 from typing import Dict
 
@@ -66,7 +67,7 @@ class BilibiliSign:
         req_data = dict(sorted(req_data.items()))
         req_data = {
             # Filter "!'()*" characters from values
-            k: ''.join(filter(lambda ch: ch not in "!'()*", str(v)))
+            k: ''.join(filter(lambda ch: ch not in "!'()*", str(v.value if isinstance(v, Enum) else v)))
             for k, v
             in req_data.items()
         }

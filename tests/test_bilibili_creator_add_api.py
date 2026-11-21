@@ -48,3 +48,4 @@ def test_save_creator_maps_profile(monkeypatch):
     assert captured["total_fans"] == 12345
     assert captured["total_liked"] == 999
     assert captured["avatar"] == "https://example.com/a.jpg"
+    assert captured["is_monitored"] == 1

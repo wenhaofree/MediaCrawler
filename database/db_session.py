@@ -335,6 +335,43 @@ def _migrate_gzh_uniqueness(sync_conn):
             pass
 
 
+def _migrate_bilibili_monitored_creators(sync_conn):
+    """
+    Backfill bilibili_up_info.is_monitored = 1 from explicit api_add history once,
+    so existing co-author rows from video cards do not trigger scheduled crawls.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(sync_conn)
+    tables = set(inspector.get_table_names())
+    if "bilibili_up_info" not in tables or "bilibili_up_stats" not in tables:
+        return
+    cols = {col["name"] for col in inspector.get_columns("bilibili_up_info")}
+    if "is_monitored" not in cols:
+        return
+    try:
+        monitored_cnt = sync_conn.execute(
+            text("SELECT COUNT(*) FROM bilibili_up_info WHERE is_monitored = 1")
+        ).scalar()
+        if monitored_cnt:
+            return
+        sync_conn.execute(
+            text(
+                """
+                UPDATE bilibili_up_info
+                SET is_monitored = 1
+                WHERE user_id IN (
+                    SELECT DISTINCT user_id
+                    FROM bilibili_up_stats
+                    WHERE source_type = 'api_add'
+                )
+                """
+            )
+        )
+    except Exception:
+        pass
+
+
 async def create_tables(db_type: str = None):
     if db_type is None:
         db_type = config.SAVE_DATA_OPTION
@@ -345,6 +382,7 @@ async def create_tables(db_type: str = None):
             await conn.run_sync(_rename_legacy_tables)
             await conn.run_sync(Base.metadata.create_all)
             await conn.run_sync(_migrate_missing_columns)
+            await conn.run_sync(_migrate_bilibili_monitored_creators)
             await conn.run_sync(_migrate_gzh_uniqueness)
 
 
