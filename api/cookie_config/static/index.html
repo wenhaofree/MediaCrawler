@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>平台 Cookie 配置中心</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/cookie-config/static/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-top">
+        <div class="hero__eyebrow">MediaCrawler Config</div>
+        <div class="hero-actions">
+          <a class="nav-link" href="/schedule-tasks">定时采集配置</a>
+          <button id="logout-button" class="button button--ghost hidden" type="button">退出登录</button>
+        </div>
+      </div>
+      <h1>平台 Cookie 配置中心</h1>
+      <p>Cookie 统一保存于数据库 <code>app_config</code> 表中，修改后对所有容器的定时任务与接口实时热生效，无需重建容器。为保障账号安全，页面仅显示脱敏掩码。</p>
+    </header>
+
+    <section id="auth-panel" class="auth-panel hidden">
+      <div class="panel-eyebrow">Access Required</div>
+      <h2>请输入访问密码</h2>
+      <p id="auth-desc" class="muted-text">密码由服务器 <code>.env</code> 中的 <code>COOKIE_ADMIN_PASSWORD</code> 配置。</p>
+      <form id="login-form" class="login-form">
+        <input id="admin-password" type="password" placeholder="输入 COOKIE_ADMIN_PASSWORD" autocomplete="current-password" required>
+        <button class="button button--primary" type="submit">解锁管理页</button>
+      </form>
+      <div id="auth-error" class="state state--error hidden"></div>
+    </section>
+
+    <section id="main-panel" class="hidden">
+      <div class="toolbar">
+        <div class="muted-text">支持保存并即时探测有效性（公众号 <code>weread_web_cookie</code> 控制阅读量拉取；移动端扫码会话仍在 <code>/root/.config/weread</code>）。</div>
+        <button id="refresh-all-button" class="button button--ghost" type="button">刷新状态</button>
+      </div>
+      <div id="global-error" class="state state--error hidden"></div>
+      <div id="platform-grid" class="platform-grid"></div>
+    </section>
+  </div>
+
+  <script src="/cookie-config/static/app.js"></script>
+</body>
+</html>

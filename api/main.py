@@ -36,6 +36,8 @@ from .routers import crawler_router, data_router, websocket_router, douyin_route
 from .sqlite_viewer import sqlite_viewer_router
 from .scheduled_tasks import scheduled_tasks_router
 from .scheduled_tasks.service import scheduled_task_service
+from .cookie_config import cookie_config_router
+from database.config_store import ensure_app_config_table
 
 # Project root directory (used for running subprocesses like uv run main.py)
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -50,6 +52,7 @@ app = FastAPI(
 WEBUI_DIR = os.path.join(os.path.dirname(__file__), "webui")
 SQLITE_VIEWER_STATIC_DIR = os.path.join(os.path.dirname(__file__), "sqlite_viewer", "static")
 SCHEDULED_TASKS_STATIC_DIR = os.path.join(os.path.dirname(__file__), "scheduled_tasks", "static")
+COOKIE_CONFIG_STATIC_DIR = os.path.join(os.path.dirname(__file__), "cookie_config", "static")
 
 # CORS configuration - allow frontend dev server access
 app.add_middleware(
@@ -75,10 +78,12 @@ app.include_router(xhs_router, prefix="/api")
 app.include_router(gzh_router, prefix="/api")
 app.include_router(sqlite_viewer_router)
 app.include_router(scheduled_tasks_router)
+app.include_router(cookie_config_router)
 
 
 @app.on_event("startup")
 async def startup_scheduled_tasks() -> None:
+    await ensure_app_config_table()
     await scheduled_task_service.start()
 
 
@@ -237,6 +242,13 @@ if os.path.exists(SCHEDULED_TASKS_STATIC_DIR):
         "/schedule-tasks/static",
         StaticFiles(directory=SCHEDULED_TASKS_STATIC_DIR),
         name="schedule-tasks-static",
+    )
+
+if os.path.exists(COOKIE_CONFIG_STATIC_DIR):
+    app.mount(
+        "/cookie-config/static",
+        StaticFiles(directory=COOKIE_CONFIG_STATIC_DIR),
+        name="cookie-config-static",
     )
 
 

@@ -26,6 +26,7 @@ from tenacity import RetryError
 
 import config
 from base.base_crawler import AbstractCrawler
+from database.config_store import get_db_cookie
 from media_downloader import MediaDownloader
 from model.m_xiaohongshu import NoteUrlInfo, CreatorUrlInfo
 from proxy.proxy_ip_pool import IpInfoModel, create_ip_pool
@@ -98,7 +99,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
             ip_proxy_info: IpInfoModel = await self.ip_proxy_pool.get_proxy()
             _, httpx_proxy_format = utils.format_proxy_info(ip_proxy_info)
 
-        cookie_str = resolve_xhs_cookies() or config.COOKIES.strip()
+        cookie_str = (await get_db_cookie("xhs")) or resolve_xhs_cookies() or config.COOKIES.strip()
         if not cookie_str:
             raise RuntimeError(
                 "XHS pure API requires cookies via ./secrets/xhs_cookies or XHS_COOKIES"
@@ -376,7 +377,7 @@ class XiaoHongShuCrawler(AbstractCrawler):
     ) -> XiaoHongShuClient:
         """Create Xiaohongshu client"""
         utils.logger.info("[XiaoHongShuCrawler.create_xhs_client] Begin create Xiaohongshu API client ...")
-        cookie_str = (cookie_str or resolve_xhs_cookies() or config.COOKIES).strip()
+        cookie_str = (cookie_str or (await get_db_cookie("xhs")) or resolve_xhs_cookies() or config.COOKIES).strip()
         cookie_dict = utils.convert_str_cookie_to_dict(cookie_str)
         xhs_client_obj = XiaoHongShuClient(
             proxy=httpx_proxy,

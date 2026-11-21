@@ -13,6 +13,7 @@ from playwright.async_api import BrowserContext, BrowserType
 
 import config
 from base.base_crawler import AbstractCrawler
+from database.config_store import resolve_platform_cookie
 from media_platform.gzh.weread_cli import (
     WereadCliError,
     WereadOmniBridge,
@@ -36,6 +37,9 @@ class GzhCrawler(AbstractCrawler):
     async def start(self) -> None:
         crawler_type_var.set(config.CRAWLER_TYPE)
         reset_gzh_account_stats_seen()
+        db_web_cookie = await resolve_platform_cookie("gzh")
+        if db_web_cookie:
+            self.bridge = WereadOmniBridge(web_cookie=db_web_cookie)
         utils.logger.info("[GzhCrawler.start] begin platform=gzh")
         if config.CRAWLER_TYPE == "creator":
             await self.get_accounts_and_articles()

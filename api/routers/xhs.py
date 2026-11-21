@@ -15,6 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 import config
+from database.config_store import get_db_cookie, resolve_platform_cookie
 from media_platform.xhs.client import XiaoHongShuClient
 from media_platform.xhs.cookies import (
     cookie_update_hint,
@@ -155,7 +156,7 @@ def _cookie_source_snapshot(cookie_str: str) -> Dict[str, Any]:
 async def xhs_cookie_inspect():
     """Local-only Cookie resolution check (no outbound call to Xiaohongshu)."""
     try:
-        cookie_str = resolve_xhs_cookies()
+        cookie_str = await resolve_platform_cookie("xhs")
         if not cookie_str:
             return {
                 "code": 400,
@@ -186,7 +187,7 @@ async def xhs_cookie_inspect():
 async def xhs_cookie_status():
     """Probe whether the currently resolved Cookie is still valid."""
     try:
-        cookie_str = resolve_xhs_cookies()
+        cookie_str = await resolve_platform_cookie("xhs")
         if not cookie_str or not looks_like_xhs_cookies(cookie_str):
             return {
                 "code": 400,
@@ -194,7 +195,7 @@ async def xhs_cookie_status():
                 "data": {"valid": False, "hint": cookie_update_hint()},
             }
 
-        client = _get_xhs_client()
+        client = _get_xhs_client(cookie_str)
         try:
             # Bound the outbound probe so a hung XHS network never wedges the API worker.
             valid = await asyncio.wait_for(client.pong(), timeout=20.0)
@@ -338,7 +339,8 @@ async def add_xhs_creator(req: AddCreatorRequest, background_tasks: BackgroundTa
     """
     started_at = time.monotonic()
 
-    client = _get_xhs_client(req.cookies)
+    db_cookie = await get_db_cookie("xhs")
+    client = _get_xhs_client(req.cookies or db_cookie or None)
     crawler_type_var.set("api_add")
     reset_xhs_creator_stats_seen()
 

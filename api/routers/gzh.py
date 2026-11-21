@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 import config
+from database.config_store import resolve_platform_cookie
 from media_platform.gzh.core import GzhCrawler
 from media_platform.gzh.weread_cli import (
     WereadCliError,
@@ -54,8 +55,9 @@ async def add_gzh_account(req: AddAccountRequest):
     if not account_id and not keyword:
         raise HTTPException(status_code=400, detail="请提供 account_id 或 keyword")
 
+    effective_web_cookie = await resolve_platform_cookie("gzh", explicit=req.web_cookie)
     try:
-        bridge = WereadOmniBridge(web_cookie=req.web_cookie)
+        bridge = WereadOmniBridge(web_cookie=effective_web_cookie or req.web_cookie)
     except WereadCliError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

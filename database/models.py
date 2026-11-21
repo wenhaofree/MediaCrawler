@@ -160,6 +160,20 @@ class BilibiliUpDynamic(Base):
     add_ts = Column(BigInteger, comment='添加时间戳')
     last_modify_ts = Column(BigInteger, comment='最后修改时间戳')
 
+class AppConfig(Base):
+    """Shared runtime configuration table (e.g. platform cookies managed via Web UI)."""
+    __tablename__ = 'app_config'
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
+    config_key = Column(String(128), nullable=False, unique=True, index=True, comment='配置键')
+    config_value = Column(Text, default='', comment='配置值')
+    platform = Column(String(32), default='', index=True, comment='关联平台')
+    description = Column(String(255), default='', comment='配置说明')
+    status = Column(String(32), default='unknown', comment='校验状态(valid/expired/unknown)')
+    last_checked_at = Column(String(64), default='', comment='最近校验时间(ISO Asia/Shanghai)')
+    last_error = Column(Text, default='', comment='最近校验信息')
+    updated_at = Column(BigInteger, default=0, comment='最后更新时间戳(ms)')
+
+
 class DouyinAweme(Base):
     __tablename__ = 'douyin_aweme'
     id = Column(Integer, primary_key=True, comment='主键ID')

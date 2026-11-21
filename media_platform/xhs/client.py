@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from proxy.proxy_ip_pool import ProxyIpPool
 
 from .cookies import cookie_dict_to_str, merge_cookie_dict, persist_xhs_cookies
+from database.config_store import sync_refreshed_cookie_to_db
 from .exception import (
     CookieExpiredError,
     DataFetchError,
@@ -236,7 +237,8 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
             )
 
         # Keep local jar in sync with valid server-side cookie rotation only.
-        self._apply_response_cookies(response)
+        if self._apply_response_cookies(response) and self.persist_cookies:
+            await sync_refreshed_cookie_to_db("xhs", self.headers.get("Cookie", ""))
 
         if return_response:
             return response.text
@@ -321,7 +323,8 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
                     raise CookieExpiredError(
                         payload.get("msg") or payload.get("message") or "XHS cookie expired"
                     )
-                self._apply_response_cookies(response)
+                if self._apply_response_cookies(response) and self.persist_cookies:
+                    await sync_refreshed_cookie_to_db("xhs", self.headers.get("Cookie", ""))
                 return payload
         return None
 

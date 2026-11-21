@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 import config
+from database.config_store import resolve_platform_cookie
 from media_platform.bilibili.client import BilibiliClient
 from media_platform.bilibili.exception import DataFetchError
 from media_platform.bilibili.help import parse_creator_info_from_url
@@ -105,7 +106,8 @@ async def add_bilibili_creator(req: AddCreatorRequest):
     接收 B站空间链接或 UID，解析 UP 主资料并入库 bilibili_up_info；
     可选拉取近期作品详情写入 bilibili_video（及对应 stats）。
     """
-    client = _get_bilibili_client(req.cookies)
+    effective_cookies = await resolve_platform_cookie("bili", explicit=req.cookies)
+    client = _get_bilibili_client(effective_cookies or None)
     crawler_type_var.set("api_add")
     reset_bili_creator_stats_seen()
 

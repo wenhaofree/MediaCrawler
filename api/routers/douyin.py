@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 import config
+from database.config_store import resolve_platform_cookie
 from media_platform.douyin.client import DouYinClient
 from media_platform.douyin.help import parse_creator_info_from_url
 from store import douyin as douyin_store
@@ -55,7 +56,8 @@ async def add_douyin_creator(req: AddCreatorRequest):
     接收抖音主页链接或 sec_user_id，调用抖音 API 解析博主基本信息，
     并自动入库至 douyin_creator 表（若 fetch_posts=True，还会将作品入库到 douyin_aweme 表）。
     """
-    client = _get_douyin_client(req.cookies)
+    effective_cookies = await resolve_platform_cookie("dy", explicit=req.cookies)
+    client = _get_douyin_client(effective_cookies or None)
 
     # 1. 解析短链或主页 URL 提取 sec_user_id
     raw_url = req.url.strip()

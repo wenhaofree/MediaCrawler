@@ -565,6 +565,7 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
             save_data_option=config.SAVE_DATA_OPTION,
             init_db=init_db_value,
             cookies=config.COOKIES,
+            cookies_supplied=cookies_supplied,
             specified_id=specified_id,
             creator_id=creator_id,
             max_pages=config.CRAWLER_MAX_PAGES,

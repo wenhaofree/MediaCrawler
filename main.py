@@ -35,6 +35,7 @@ from typing import Optional, Type
 import cmd_arg
 import config
 from database import db
+from database.config_store import apply_db_cookie_to_config
 from base.base_crawler import AbstractCrawler
 from media_platform.bilibili import BilibiliCrawler
 from media_platform.douyin import DouYinCrawler
@@ -115,6 +116,9 @@ async def main() -> None:
     # 数据库保存模式下自动建表，避免首次运行时出现 no such table 错误
     if config.SAVE_DATA_OPTION in ("sqlite", "mysql", "db", "postgres"):
         await db.init_db(config.SAVE_DATA_OPTION)
+
+    if not getattr(args, "cookies_supplied", False):
+        await apply_db_cookie_to_config(config.PLATFORM)
 
     crawler = CrawlerFactory.create_crawler(platform=config.PLATFORM)
     await crawler.start()

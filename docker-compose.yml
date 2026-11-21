@@ -31,6 +31,7 @@ services:
 
       # 4. 调度元数据持久化到挂载目录（容器重建后定时任务不丢）
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      COOKIE_ADMIN_PASSWORD: "${COOKIE_ADMIN_PASSWORD:-}"
 
       # 5. Docker 启动后自动写入抖音增长快照定时任务（纯 API，无需 Chrome）
       AUTO_SEED_DY_SCHEDULE: "${AUTO_SEED_DY_SCHEDULE:-true}"
@@ -77,6 +78,7 @@ services:
       AUTO_INIT_DB: "${AUTO_INIT_DB:-true}"
       TZ: Asia/Shanghai
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      COOKIE_ADMIN_PASSWORD: "${COOKIE_ADMIN_PASSWORD:-}"
       CRAWLER_PLATFORM: bili
       CRAWLER_COOKIES: "${BILI_COOKIES:-}"
       BILI_CREATOR_IDS: "${BILI_CREATOR_IDS:-}"
@@ -121,6 +123,7 @@ services:
       AUTO_INIT_DB: "true"
       TZ: Asia/Shanghai
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      COOKIE_ADMIN_PASSWORD: "${COOKIE_ADMIN_PASSWORD:-}"
       CRAWLER_PLATFORM: xhs
       CRAWLER_COOKIES: "${XHS_COOKIES:-}"
       XHS_COOKIES: "${XHS_COOKIES:-}"
@@ -175,6 +178,7 @@ services:
       AUTO_INIT_DB: "true"
       TZ: Asia/Shanghai
       SQLITE_DB_PATH: /app/data/sqlite_tables.db
+      COOKIE_ADMIN_PASSWORD: "${COOKIE_ADMIN_PASSWORD:-}"
       CRAWLER_PLATFORM: gzh
       CRAWLER_TYPE: creator
       ENABLE_PURE_API_MODE: "true"
