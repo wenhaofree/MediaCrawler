@@ -95,6 +95,8 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         if not response.cookies:
             return False
         updates = {name: value for name, value in response.cookies.items()}
+        if "web_session" in updates and not str(updates["web_session"]).strip():
+            return False
         merged, changed = merge_cookie_dict(self.cookie_dict, updates)
         if not changed:
             return False
@@ -190,9 +192,6 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         async with make_async_client(proxy=self.proxy) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
 
-        # Keep local jar in sync with server-side cookie rotation.
-        self._apply_response_cookies(response)
-
         if response.status_code == 401:
             raise CookieExpiredError(
                 f"XHS cookie expired or invalid (HTTP {response.status_code})"
@@ -235,6 +234,9 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
                 or response_data.get("message")
                 or "XHS cookie expired"
             )
+
+        # Keep local jar in sync with valid server-side cookie rotation only.
+        self._apply_response_cookies(response)
 
         if return_response:
             return response.text
@@ -311,11 +313,16 @@ class XiaoHongShuClient(AbstractApiClient, ProxyRefreshMixin):
         headers = await self._pre_headers(uri, params={})
         async with make_async_client(proxy=self.proxy) as client:
             response = await client.get(f"{self._host}{uri}", headers=headers)
-            self._apply_response_cookies(response)
-            if response.status_code == 200:
-                return response.json()
             if response.status_code == 401:
                 raise CookieExpiredError("XHS cookie expired while querying selfinfo")
+            if response.status_code == 200:
+                payload = response.json()
+                if self._is_login_expired_payload(payload):
+                    raise CookieExpiredError(
+                        payload.get("msg") or payload.get("message") or "XHS cookie expired"
+                    )
+                self._apply_response_cookies(response)
+                return payload
         return None
 
     async def pong(self) -> bool:

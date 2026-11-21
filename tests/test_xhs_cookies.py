@@ -113,3 +113,42 @@ async def test_request_raises_cookie_expired(monkeypatch):
 
     with pytest.raises(CookieExpiredError):
         await client.request("GET", "https://edith.xiaohongshu.com/api/x")
+
+
+@pytest.mark.asyncio
+async def test_expired_response_does_not_persist_cookies(monkeypatch, tmp_path):
+    target = tmp_path / "runtime"
+    monkeypatch.setenv("XHS_COOKIES_RUNTIME_FILE", str(target))
+
+    client = XiaoHongShuClient(
+        headers={"Cookie": "a1=x; web_session=y"},
+        playwright_page=None,
+        cookie_dict={"a1": "x", "web_session": "y"},
+        persist_cookies=True,
+    )
+
+    class _Resp:
+        status_code = 200
+        cookies = httpx.Cookies([("web_session", "stale-guest")])
+        text = '{"success":false,"msg":"登录已过期","code":-100}'
+
+        def json(self):
+            return {"success": False, "msg": "登录已过期", "code": -100}
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, *args, **kwargs):
+            return _Resp()
+
+    monkeypatch.setattr(
+        "media_platform.xhs.client.make_async_client", lambda **kwargs: _Client()
+    )
+
+    with pytest.raises(CookieExpiredError):
+        await client.query_self()
+    assert not target.exists()

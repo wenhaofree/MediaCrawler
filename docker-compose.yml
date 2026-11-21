@@ -140,8 +140,10 @@ services:
       AUTO_SEED_DY_SCHEDULE: "false"
       AUTO_SEED_BILI_SCHEDULE: "false"
       AUTO_SEED_XHS_SCHEDULE: "${AUTO_SEED_XHS_SCHEDULE:-true}"
+      SCHEDULED_CRAWL_PURE_API: "${SCHEDULED_CRAWL_PURE_API:-true}"
       XHS_SCHEDULE_RUN_TIME: "${XHS_SCHEDULE_RUN_TIME:-10:30}"
       XHS_SCHEDULE_TASK_NAME: "${XHS_SCHEDULE_TASK_NAME:-小红书每日安全快照(自动)}"
+      XHS_SCHEDULE_SYNC_FROM_DB: "${XHS_SCHEDULE_SYNC_FROM_DB:-true}"
     volumes:
       - ./data/xhs:/app/data
       - ./.env:/app/.env:ro
@@ -188,8 +190,10 @@ services:
       AUTO_SEED_BILI_SCHEDULE: "false"
       AUTO_SEED_XHS_SCHEDULE: "false"
       AUTO_SEED_GZH_SCHEDULE: "${AUTO_SEED_GZH_SCHEDULE:-true}"
+      SCHEDULED_CRAWL_PURE_API: "${SCHEDULED_CRAWL_PURE_API:-true}"
       GZH_SCHEDULE_RUN_TIME: "${GZH_SCHEDULE_RUN_TIME:-11:00}"
       GZH_SCHEDULE_TASK_NAME: "${GZH_SCHEDULE_TASK_NAME:-公众号每日阅读量快照(自动)}"
+      GZH_SCHEDULE_SYNC_FROM_DB: "${GZH_SCHEDULE_SYNC_FROM_DB:-true}"
     volumes:
       - ./data/gzh:/app/data
       - ./.env:/app/.env:ro

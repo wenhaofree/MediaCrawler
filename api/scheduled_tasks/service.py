@@ -716,28 +716,76 @@ class ScheduledTaskService:
                 len(creators),
             )
 
+    async def _load_xhs_creator_ids_from_db(self, limit: int = 1) -> list[str]:
+        """Load least-recently-collected XHS user_ids from xhs_creator."""
+        from sqlalchemy import func, select
+
+        from database.db_session import get_session
+        from database.models import XhsCreator, XhsCreatorStats
+
+        save_option = os.getenv("XHS_SCHEDULE_SAVE_OPTION", "").strip() or getattr(
+            config, "SAVE_DATA_OPTION", "postgres"
+        )
+        if save_option not in {"postgres", "db", "mysql", "sqlite"}:
+            return []
+
+        previous = getattr(config, "SAVE_DATA_OPTION", None)
+        try:
+            config.SAVE_DATA_OPTION = save_option
+            async with get_session() as session:
+                if session is None:
+                    return []
+                last_collected = func.coalesce(func.max(XhsCreatorStats.collected_at), "")
+                result = await session.execute(
+                    select(XhsCreator.user_id)
+                    .outerjoin(XhsCreatorStats, XhsCreatorStats.user_id == XhsCreator.user_id)
+                    .where(XhsCreator.user_id.is_not(None))
+                    .where(XhsCreator.user_id != "")
+                    .group_by(XhsCreator.user_id)
+                    .order_by(
+                        last_collected.asc(),
+                        func.coalesce(func.min(XhsCreator.last_modify_ts), 0).asc(),
+                        func.min(XhsCreator.id).asc(),
+                    )
+                    .limit(max(1, int(limit)))
+                )
+                return [str(row[0]).strip() for row in result.all() if str(row[0] or "").strip()]
+        except Exception as exc:
+            utils.logger.exception(
+                "[ScheduledTaskService._load_xhs_creator_ids_from_db] failed: %s",
+                exc,
+            )
+            return []
+        finally:
+            if previous is not None:
+                config.SAVE_DATA_OPTION = previous
+
     async def ensure_default_xhs_schedule(self) -> None:
         """Seed one conservative Xiaohongshu creator snapshot per day."""
         if not _env_flag("AUTO_SEED_XHS_SCHEDULE", default=False):
             return
 
+        max_creators = max(1, int(os.getenv("XHS_MAX_CREATORS_PER_RUN", "1") or "1"))
         creators = [
             item.strip()
             for item in os.getenv("XHS_CREATOR_IDS", "").split(",")
             if item.strip()
         ]
+        if creators:
+            if len(creators) > 1:
+                utils.logger.warning(
+                    "[ScheduledTaskService.ensure_default_xhs_schedule] "
+                    "only the first XHS creator is scheduled to limit account risk"
+                )
+                creators = creators[:1]
+        else:
+            creators = await self._load_xhs_creator_ids_from_db(limit=max_creators)
         if not creators:
             utils.logger.warning(
                 "[ScheduledTaskService.ensure_default_xhs_schedule] "
-                "XHS_CREATOR_IDS is empty; skip seeding"
+                "no creators found in XHS_CREATOR_IDS or xhs_creator; skip seeding"
             )
             return
-        if len(creators) > 1:
-            utils.logger.warning(
-                "[ScheduledTaskService.ensure_default_xhs_schedule] "
-                "only the first XHS creator is scheduled to limit account risk"
-            )
-            creators = creators[:1]
 
         run_time = os.getenv("XHS_SCHEDULE_RUN_TIME", "10:30").strip() or "10:30"
         task_name = os.getenv("XHS_SCHEDULE_TASK_NAME", DEFAULT_XHS_SCHEDULE_TASK_NAME).strip() or DEFAULT_XHS_SCHEDULE_TASK_NAME
@@ -1375,6 +1423,66 @@ class ScheduledTaskService:
                     len(creators),
                 )
 
+        xhs_task_name = os.getenv("XHS_SCHEDULE_TASK_NAME", DEFAULT_XHS_SCHEDULE_TASK_NAME).strip() or DEFAULT_XHS_SCHEDULE_TASK_NAME
+        if (
+            task.get("platform") == "xhs"
+            and task.get("name") == xhs_task_name
+            and _env_flag("XHS_SCHEDULE_SYNC_FROM_DB", default=True)
+            and not os.getenv("XHS_CREATOR_IDS", "").strip()
+        ):
+            max_creators = max(1, int(os.getenv("XHS_MAX_CREATORS_PER_RUN", "1") or "1"))
+            creators = await self._load_xhs_creator_ids_from_db(limit=max_creators)
+            if creators:
+                await self.update_task(
+                    task_id,
+                    ScheduledTaskUpsertRequest(
+                        name=task["name"],
+                        platform=PlatformEnum.XHS,
+                        run_time=task["run_time"],
+                        max_pages=task["max_pages"],
+                        enable_comments=task["enable_comments"],
+                        enable_sub_comments=task["enable_sub_comments"],
+                        save_option=SaveDataOptionEnum(task["save_option"]),
+                        status=task["status"],
+                        creators=creators,
+                    ),
+                )
+                task = await self.get_task(task_id)
+                utils.logger.info(
+                    "[ScheduledTaskService._execute_task_run] rotated %s creator(s) from xhs_creator: %s",
+                    len(creators),
+                    ",".join(creators),
+                )
+
+        gzh_task_name = os.getenv("GZH_SCHEDULE_TASK_NAME", DEFAULT_GZH_SCHEDULE_TASK_NAME).strip() or DEFAULT_GZH_SCHEDULE_TASK_NAME
+        if (
+            task.get("platform") == "gzh"
+            and task.get("name") == gzh_task_name
+            and _env_flag("GZH_SCHEDULE_SYNC_FROM_DB", default=True)
+            and not os.getenv("GZH_ACCOUNT_IDS", "").strip()
+        ):
+            creators = await self._load_gzh_account_ids_from_db()
+            if creators:
+                await self.update_task(
+                    task_id,
+                    ScheduledTaskUpsertRequest(
+                        name=task["name"],
+                        platform=PlatformEnum.GZH,
+                        run_time=task["run_time"],
+                        max_pages=task["max_pages"],
+                        enable_comments=task["enable_comments"],
+                        enable_sub_comments=task["enable_sub_comments"],
+                        save_option=SaveDataOptionEnum(task["save_option"]),
+                        status=task["status"],
+                        creators=creators,
+                    ),
+                )
+                task = await self.get_task(task_id)
+                utils.logger.info(
+                    "[ScheduledTaskService._execute_task_run] synced %s accounts from gzh_account",
+                    len(creators),
+                )
+
         started_at = _now_iso()
         slot = scheduled_slot or "manual"
         if trigger_type == "manual":
@@ -1468,8 +1576,8 @@ class ScheduledTaskService:
             await asyncio.sleep(0.2)
 
         save_option = SaveDataOptionEnum(task["save_option"])
-        # Bilibili snapshots share the same schedule slots as Douyin trend snapshots.
-        slot = scheduled_slot if task["platform"] in {"dy", "bili"} else "manual"
+        # Scheduled snapshot platforms record their trigger slot instead of 'manual'.
+        slot = scheduled_slot if task["platform"] in {"dy", "bili", "xhs", "gzh"} else "manual"
         use_pure_api = task["platform"] == "xhs" or _scheduled_crawl_use_pure_api()
         request = CrawlerStartRequest(
             platform=PlatformEnum(task["platform"]),

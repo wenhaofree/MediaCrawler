@@ -337,6 +337,150 @@ async def test_load_bilibili_creator_ids_from_db_only_returns_monitored(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_xhs_default_schedule_rotates_least_recently_collected_from_db(tmp_path, monkeypatch):
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import StaticPool
+
+    import config
+    from database import db_session
+    from database.models import Base, XhsCreator, XhsCreatorStats
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+    monkeypatch.setattr(db_session, "get_async_engine", lambda *args, **kwargs: engine)
+    monkeypatch.setattr(config, "SAVE_DATA_OPTION", "db")
+    monkeypatch.setenv("AUTO_SEED_XHS_SCHEDULE", "true")
+    monkeypatch.setenv("XHS_CREATOR_IDS", "")
+    monkeypatch.setenv("XHS_SCHEDULE_SAVE_OPTION", "db")
+    monkeypatch.setenv("XHS_MAX_CREATORS_PER_RUN", "1")
+    monkeypatch.setenv("XHS_SCHEDULE_SYNC_FROM_DB", "true")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with db_session.get_session() as session:
+        session.add_all(
+            [
+                XhsCreator(user_id="640c29eb000000001001c91b", nickname="recent", last_modify_ts=200),
+                XhsCreator(user_id="5eb8e1d400000000010075ae", nickname="never-synced", last_modify_ts=100),
+            ]
+        )
+        session.add(
+            XhsCreatorStats(
+                user_id="640c29eb000000001001c91b",
+                follower_count=100,
+                collected_at="2026-11-20T10:30:00+08:00",
+                scheduled_slot="morning",
+                source_type="creator",
+            )
+        )
+        await session.commit()
+
+    service = await _build_service(tmp_path, monkeypatch)
+    await service.ensure_default_xhs_schedule()
+    task = (await service.list_tasks())["tasks"][0]
+    assert [c["normalized_creator_id"] for c in task["creators"]] == ["5eb8e1d400000000010075ae"]
+
+    requests = []
+
+    async def fake_start(request):
+        requests.append(request)
+        return True
+
+    async def fake_wait():
+        return 0
+
+    async def fake_count_creator_items(_platform, _creator):
+        return 0
+
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.start", fake_start)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.wait", fake_wait)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.process", None)
+    monkeypatch.setattr(service, "_count_creator_items", fake_count_creator_items)
+
+    await service._execute_task_run(task["id"], "schedule", scheduled_slot="morning")
+    assert requests[0].creator_ids == "5eb8e1d400000000010075ae"
+    assert requests[0].scheduled_slot == "morning"
+
+    # Once 5eb8... gets a newer snapshot, the next run rotates back to 640c...
+    async with db_session.get_session() as session:
+        session.add(
+            XhsCreatorStats(
+                user_id="5eb8e1d400000000010075ae",
+                follower_count=200,
+                collected_at="2026-11-21T10:30:00+08:00",
+                scheduled_slot="morning",
+                source_type="creator",
+            )
+        )
+        await session.commit()
+
+    await service._execute_task_run(task["id"], "schedule", scheduled_slot="morning")
+    assert requests[1].creator_ids == "640c29eb000000001001c91b"
+
+    await service.shutdown()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_gzh_scheduled_task_syncs_accounts_from_db_before_run(tmp_path, monkeypatch):
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import StaticPool
+
+    import config
+    from database import db_session
+    from database.models import Base, GzhAccount
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+    monkeypatch.setattr(db_session, "get_async_engine", lambda *args, **kwargs: engine)
+    monkeypatch.setattr(config, "SAVE_DATA_OPTION", "db")
+    monkeypatch.setenv("AUTO_SEED_GZH_SCHEDULE", "true")
+    monkeypatch.setenv("GZH_ACCOUNT_IDS", "")
+    monkeypatch.setenv("GZH_SCHEDULE_SYNC_FROM_DB", "true")
+    monkeypatch.setenv("SCHEDULED_CRAWL_PURE_API", "true")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with db_session.get_session() as session:
+        session.add(GzhAccount(account_id="MP_WXS_3913422171", nickname="first"))
+        await session.commit()
+
+    service = await _build_service(tmp_path, monkeypatch)
+    await service.ensure_default_gzh_schedule()
+    task = (await service.list_tasks())["tasks"][0]
+    assert [c["normalized_creator_id"] for c in task["creators"]] == ["MP_WXS_3913422171"]
+
+    # Add a second GZH account later; _execute_task_run must pick it up without container restart.
+    async with db_session.get_session() as session:
+        session.add(GzhAccount(account_id="MP_WXS_2390745668", nickname="second"))
+        await session.commit()
+
+    requests = []
+
+    async def fake_start(request):
+        requests.append(request)
+        return True
+
+    async def fake_wait():
+        return 0
+
+    async def fake_count_creator_items(_platform, _creator):
+        return 0
+
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.start", fake_start)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.wait", fake_wait)
+    monkeypatch.setattr("api.scheduled_tasks.service.crawler_manager.process", None)
+    monkeypatch.setattr(service, "_count_creator_items", fake_count_creator_items)
+
+    await service._execute_task_run(task["id"], "schedule", scheduled_slot="morning")
+    assert [r.creator_ids for r in requests] == ["MP_WXS_3913422171", "MP_WXS_2390745668"]
+    assert all(r.scheduled_slot == "morning" and r.pure_api is True for r in requests)
+
+    await service.shutdown()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_delete_task_removes_queued_run_requests(tmp_path, monkeypatch):
     service = await _build_service(tmp_path, monkeypatch)
     payload = ScheduledTaskUpsertRequest(
