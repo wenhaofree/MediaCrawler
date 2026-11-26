@@ -149,37 +149,124 @@ uv run main.py \
 
 > Chrome/9222 只保留给闲鱼、七麦或需要人工登录排障的平台；本节的抖音、B站和小红书验证无需启动 Chrome。
 
-## 5. 公众号作者添加接口
+## 5. 公众号（gzh）：接口调用、文章反查与本地测试方案
 
-公众号服务默认端口是 `${GZH_APP_PORT:-8088}`。`POST /api/gzh/account/add` 会通过本机的 `weread-omni` 查询公众号资料并写入 `gzh_account`；当 `fetch_articles=true` 时，文章与阅读量会写入 `gzh_article`、`gzh_account_stats`。
+公众号服务默认端口是 `${GZH_APP_PORT:-8088}`。底层通过子进程调用 `weread-omni` CLI（`--json`）查询公众号资料、文章列表与阅读量，数据写入 `gzh_account`、`gzh_article` 与 `gzh_account_stats`。
 
-仅添加作者资料（不请求文章阅读量，无需在请求中传 Cookie）：
+### 5.1 严格的文章 URL 规则
 
-```bash
-curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
-  -H 'Content-Type: application/json' \
-  -d '{"account_id":"MP_WXS_2390745668","fetch_articles":false}'
-```
+所有涉及 `gzh` 文章链接的输入（`POST /api/gzh/article/inspect`、`POST /api/gzh/account/add` 的 `article_url`、`--specified_id`、定时任务及采集落库字段 `article_url`）均严格遵循公众号长链接规则：
+- 必须为 `https://mp.weixin.qq.com/s?...`（支持自动解包 `/mp/wappoc_appmsgcaptcha?target_url=...` 验证码跳转，自动剥离 `#rd` 等 fragment）；
+- 禁止携带账号密码信息或自定义端口；
+- 必须包含明确且可解码为数字公众号 ID（`MP_WXS_<数字>`）的 `__biz=` 参数，以及有效的 `mid`、`sn`（若有 `idx` 须为数字）；
+- 短链接（如 `https://mp.weixin.qq.com/s/xxx`）及缺少 `__biz=` 的链接将被拒绝（API 返回 HTTP `400`）。
 
-按公众号名称检索并添加首个匹配账号：
-
-```bash
-curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
-  -H 'Content-Type: application/json' \
-  -d '{"keyword":"人民日报","fetch_articles":false}'
-```
-
-采集文章与阅读量时，先在服务器 `.env` 配置 `WEREAD_WEB_COOKIE`，不要把 Cookie 放进 cURL 历史记录：
+示例标准链接：
 
 ```bash
-curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
-  -H 'Content-Type: application/json' \
-  -d '{"account_id":"MP_WXS_2390745668","fetch_articles":true,"max_articles":20}'
+ARTICLE_URL='https://mp.weixin.qq.com/s?__biz=MzU2MDYzMjgyMQ%3D%3D&mid=2247495310&idx=1&sn=b7c5d46309bf3c40a574c8843ef141d5&scene=45&poc_token=HO4VCGujv0cXnLuD7cBau8kvwn9hkNf1epLH_63k'
 ```
 
-响应会返回 `account_id`、`nickname`、`author`、`avatar`、`category`、`desc`、`articles_saved`、`stats_saved` 与 `warnings`。接口依赖 `weread-omni`，部署前需设置 `WEREAD_OMNI_CLI` 并完成对应登录配置。
+### 5.2 本地测试前置准备（二选一）
 
-阅读量接口使用的是微信读书 Web 会话；`WEREAD_WEB_COOKIE` 与 `weread-omni` 保存的手机端登录会话独立，无法互相刷新。Cookie 失效后只需安全地更新宿主机 `.env` 中的 `WEREAD_WEB_COOKIE`，程序会在下一次阅读量请求时重新读取，无需重启容器。建议将账号资料采集与阅读量采集分开：资料添加使用 `fetch_articles=false`，阅读量由每天一次的定时任务执行；出现“登录超时”时暂停任务、重新在本人已登录的微信读书 Web 会话中取得 Cookie，避免连续重试。
+1. **方式 A：本机启动 `gzh` API 服务**（需本机已完成 `weread-omni` 构建与移动端 `login`，必要时在 `.env` 指定 `WEREAD_OMNI_CLI`）：
+
+```bash
+uv run uvicorn api.main:app --host 127.0.0.1 --port 8088
+```
+
+2. **方式 B：本地通过 SSH 端口转发直连服务器 `mediacrawler-gzh`**（无需在本机跑服务与登录）：
+
+```bash
+ssh -N -L 8088:127.0.0.1:8088 wenhao@68.64.179.214
+```
+
+### 5.3 本地 `curl` 验证步骤（`gzh` 接口全流程）
+
+1. **健康检查**：
+
+```bash
+curl -sS http://127.0.0.1:8088/api/health
+# 期望返回: {"status":"ok"}
+```
+
+2. **根据文章链接反查公众号信息（`POST /api/gzh/article/inspect`）**：
+
+```bash
+ARTICLE_URL='https://mp.weixin.qq.com/s?__biz=MzU2MDYzMjgyMQ%3D%3D&mid=2247495310&idx=1&sn=b7c5d46309bf3c40a574c8843ef141d5&scene=45&poc_token=HO4VCGujv0cXnLuD7cBau8kvwn9hkNf1epLH_63k'
+
+# 仅反查，不写入数据库（无需 WEREAD_WEB_COOKIE）
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/article/inspect \
+  -H 'Content-Type: application/json' \
+  -d "{\"article_url\":\"$ARTICLE_URL\",\"save_account\":false}" | jq .
+
+# 反查并同步将公众号写入 gzh_account
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/article/inspect \
+  -H 'Content-Type: application/json' \
+  -d "{\"article_url\":\"$ARTICLE_URL\",\"save_account\":true}" | jq .
+```
+
+3. **添加公众号并按需采集文章（`POST /api/gzh/account/add`）**：
+
+```bash
+# 3.1 通过 article_url 仅添加作者资料（不请求阅读量，无需 Web Cookie）
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d "{\"article_url\":\"$ARTICLE_URL\",\"fetch_articles\":false}" | jq .
+
+# 3.2 通过 article_url 添加并拉取文章与阅读量（需配置有效 WEREAD_WEB_COOKIE / secrets/weread_web_cookie）
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d "{\"article_url\":\"$ARTICLE_URL\",\"fetch_articles\":true,\"max_articles\":20}" | jq .
+
+# 3.3 通过 account_id 仅添加作者资料
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d '{"account_id":"MP_WXS_2390745668","fetch_articles":false}' | jq .
+
+# 3.4 按公众号名称检索并添加首个匹配账号
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d '{"keyword":"人民日报","fetch_articles":false}' | jq .
+
+# 3.5 通过 account_id 采集文章与阅读量
+curl --fail-with-body -sS -X POST http://127.0.0.1:8088/api/gzh/account/add \
+  -H 'Content-Type: application/json' \
+  -d '{"account_id":"MP_WXS_2390745668","fetch_articles":true,"max_articles":20}' | jq .
+```
+
+4. **负向校验：非规范文章链接应被严格拒绝（HTTP `400`）**：
+
+```bash
+# 短链接（缺少 __biz=）
+curl -i -sS -X POST http://127.0.0.1:8088/api/gzh/article/inspect \
+  -H 'Content-Type: application/json' \
+  -d '{"article_url":"https://mp.weixin.qq.com/s/short-only","save_account":false}'
+
+# 长链接但缺少 __biz=
+curl -i -sS -X POST http://127.0.0.1:8088/api/gzh/article/inspect \
+  -H 'Content-Type: application/json' \
+  -d '{"article_url":"https://mp.weixin.qq.com/s?mid=2247495310&idx=1&sn=b7c5d46309bf3c40a574c8843ef141d5","save_account":false}'
+```
+
+### 5.4 本地 CLI 与自动化测试验证（`gzh`）
+
+```bash
+# 1) 命令行按文章链接反查并采集对应公众号（detail 模式）
+uv run main.py --platform gzh --type detail --save_data_option sqlite \
+  --specified_id "$ARTICLE_URL"
+
+# 2) 命令行按公众号 ID 采集（creator 模式）
+uv run main.py --platform gzh --type creator --save_data_option sqlite \
+  --creator_id "MP_WXS_3560632821"
+
+# 3) gzh 模块单元测试与 API 路由回归测试
+uv run pytest tests/test_gzh_weread_cli.py tests/test_gzh_article_urls.py tests/test_gzh_store_and_api.py tests/test_gzh_article_uniqueness.py
+```
+
+响应会返回 `account_id`、`biz`、`biz_numeric_id`、`nickname`、`author`、`avatar`、`category`、`desc`、`deep_link`、`reader_link`、`articles_saved`、`stats_saved` 与 `warnings`。接口依赖 `weread-omni`，部署前需设置 `WEREAD_OMNI_CLI` 并完成对应登录配置。
+
+阅读量接口使用的是微信读书 Web 会话；`WEREAD_WEB_COOKIE` 与 `weread-omni` 保存的手机端登录会话独立，无法互相刷新。Cookie 失效后只需安全地更新宿主机 `.env` 或 `./secrets/weread_web_cookie` 中的 Cookie，程序会在下一次阅读量请求时重新读取，无需重启容器。建议将账号资料采集与阅读量采集分开：资料添加使用 `fetch_articles=false`（或 `/api/gzh/article/inspect`），阅读量由每天一次的定时任务执行；出现“登录超时”时暂停任务、重新在本人已登录的微信读书 Web 会话中取得 Cookie，避免连续重试。
 
 ### 服务器 Docker：weread-omni 与 Cookie 稳定运行
 
