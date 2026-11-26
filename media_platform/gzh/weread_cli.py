@@ -7,18 +7,23 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
 import os
 import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, urlparse, urlunparse
+from urllib.parse import parse_qs, unquote, urlparse, urlunparse
 
 import config
 from tools import utils
 
 ACCOUNT_ID_RE = re.compile(r"^MP_WXS_\d+$")
+BIZ_BASE64_RE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+ARTICLE_SN_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 class WereadCliError(RuntimeError):
@@ -40,9 +45,61 @@ def normalize_account_id(raw: str) -> str:
     raise ValueError(f"Invalid WeRead public-account id: {raw!r} (expect MP_WXS_*)")
 
 
+def parse_biz_value(raw: Optional[str]) -> Optional[Dict[str, str]]:
+    """
+    Parse WeChat official-account `__biz` query value into base64, numeric ID and MP_WXS_* ID.
+    Accepts standard or URL-safe / percent-encoded base64 encoding a numeric biz ID.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    text = unquote(raw).strip()
+    if not text:
+        return None
+    normalized = text.replace("-", "+").replace("_", "/")
+    if not BIZ_BASE64_RE.match(normalized) or len(normalized) % 4 == 1:
+        return None
+    padded = normalized + "=" * ((4 - len(normalized) % 4) % 4)
+    try:
+        decoded = base64.b64decode(padded, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return None
+    if not decoded.isdigit():
+        return None
+    if base64.b64encode(decoded.encode("utf-8")).decode("ascii") != padded:
+        return None
+    return {
+        "biz": padded,
+        "biz_numeric_id": decoded,
+        "account_id": f"MP_WXS_{decoded}",
+    }
+
+
+def biz_from_account_id(account_id: str) -> Dict[str, str]:
+    """Derive canonical `__biz` and numeric ID from an `MP_WXS_<digits>` account ID."""
+    normalized = normalize_account_id(account_id)
+    biz_numeric_id = normalized.removeprefix("MP_WXS_")
+    biz = base64.b64encode(biz_numeric_id.encode("utf-8")).decode("ascii")
+    return {
+        "biz": biz,
+        "biz_numeric_id": biz_numeric_id,
+        "account_id": normalized,
+    }
+
+
 def normalize_published_at(value: Any) -> Optional[int]:
     if value in (None, ""):
         return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        if not text.lstrip("-").isdigit():
+            try:
+                dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+                return int(dt.timestamp())
+            except ValueError:
+                return None
+        value = text
     try:
         ts = int(value)
     except (TypeError, ValueError):
@@ -310,6 +367,94 @@ class WereadOmniBridge:
         )
         return data if isinstance(data, dict) else {}
 
+    async def inspect_article(self, article_url: str) -> Dict[str, Any]:
+        """Inspect public-account profile metadata from a strict WeChat article URL."""
+        normalized_url = validate_article_url(article_url)
+        data = await self.run_json(["public-accounts", "inspect-article", normalized_url])
+        return data if isinstance(data, dict) else {}
+
+
+def _parse_strict_mp_url(url: str):
+    if not isinstance(url, str):
+        raise ValueError("文章链接不能为空")
+    text = url.strip()
+    if not text or text != url or any(ch.isspace() for ch in text):
+        raise ValueError("文章链接不能包含空白字符")
+    parsed = urlparse(text)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "mp.weixin.qq.com"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port is not None
+        or parsed.netloc.lower() != "mp.weixin.qq.com"
+    ):
+        raise ValueError(
+            "文章链接必须为 https://mp.weixin.qq.com/s?... 格式且不能包含认证信息或自定义端口"
+        )
+    return parsed
+
+
+def validate_article_url(url: str) -> str:
+    """
+    Strictly validate and normalize a WeChat Official Account article URL.
+
+    Rules:
+    - HTTPS mp.weixin.qq.com without credentials or custom port
+    - Unwraps /mp/wappoc_appmsgcaptcha?target_url=... redirects
+    - Path must be /s
+    - Must contain an explicit, valid `__biz=` parameter (base64 numeric official-account ID)
+    - Must contain valid `mid` (digits) and `sn` (alphanumeric/_/-), and numeric `idx` if present
+    - Strips URL fragment (e.g. #rd)
+    """
+    parsed = _parse_strict_mp_url(url)
+    if parsed.path == "/mp/wappoc_appmsgcaptcha":
+        target_url = (parse_qs(parsed.query).get("target_url") or [""])[0]
+        if not target_url:
+            raise ValueError("验证码跳转链接缺少 target_url 参数")
+        parsed = _parse_strict_mp_url(target_url)
+
+    if parsed.path != "/s":
+        raise ValueError(
+            "文章链接严格遵循公众号长链接规则，路径必须为 /s 且包含明确的 __biz= 参数"
+        )
+
+    query = parse_qs(parsed.query, keep_blank_values=False)
+    raw_biz = (query.get("__biz") or [""])[0]
+    if not raw_biz or not parse_biz_value(raw_biz):
+        raise ValueError("文章链接缺少有效且明确的 __biz= 参数")
+
+    mid = (query.get("mid") or [""])[0]
+    if not mid or not mid.isdigit():
+        raise ValueError("文章链接缺少有效的 mid 参数")
+
+    sn = (query.get("sn") or [""])[0]
+    if not sn or not ARTICLE_SN_RE.match(sn):
+        raise ValueError("文章链接缺少有效的 sn 参数")
+
+    if "idx" in query:
+        idx = (query.get("idx") or [""])[0]
+        if not idx.isdigit():
+            raise ValueError("文章链接中的 idx 参数必须为数字")
+
+    return urlunparse(parsed._replace(fragment=""))
+
+
+def extract_biz_from_article_url(url: str) -> Dict[str, str]:
+    """Validate an article URL and return its `__biz`, numeric ID, and `MP_WXS_*` ID."""
+    normalized = validate_article_url(url)
+    parsed = urlparse(normalized)
+    raw_biz = (parse_qs(parsed.query).get("__biz") or [""])[0]
+    biz_info = parse_biz_value(raw_biz)
+    if not biz_info:
+        raise ValueError("文章链接缺少有效且明确的 __biz= 参数")
+    return biz_info
+
+
+def extract_account_id_from_article_url(url: str) -> str:
+    """Validate an article URL and return its `MP_WXS_<digits>` account ID."""
+    return extract_biz_from_article_url(url)["account_id"]
+
 
 def map_book_info_to_account(account_id: str, book: Dict[str, Any]) -> Dict[str, Any]:
     info = book.get("bookInfo") if isinstance(book.get("bookInfo"), dict) else book
@@ -326,20 +471,109 @@ def map_book_info_to_account(account_id: str, book: Dict[str, Any]) -> Dict[str,
     }
 
 
+def map_inspect_result_to_account(
+    inspect_data: Dict[str, Any],
+    book: Optional[Dict[str, Any]] = None,
+    *,
+    fallback_article_url: str = "",
+) -> Dict[str, Any]:
+    """Merge `weread-omni public-accounts inspect-article` output with optional `book info`."""
+    account = inspect_data.get("account") if isinstance(inspect_data.get("account"), dict) else {}
+    raw_book = book or {}
+    book_info = raw_book.get("bookInfo") if isinstance(raw_book.get("bookInfo"), dict) else raw_book
+
+    raw_account_id = (
+        account.get("accountId")
+        or book_info.get("bookId")
+        or book_info.get("accountId")
+        or ""
+    )
+    if not raw_account_id and fallback_article_url:
+        raw_account_id = extract_account_id_from_article_url(fallback_article_url)
+    account_id = normalize_account_id(str(raw_account_id))
+    biz_info = biz_from_account_id(account_id)
+
+    return {
+        "account_id": account_id,
+        "biz": _pick_nonempty(account.get("biz"), biz_info["biz"]) or biz_info["biz"],
+        "biz_numeric_id": (
+            _pick_nonempty(account.get("bizNumericId"), biz_info["biz_numeric_id"])
+            or biz_info["biz_numeric_id"]
+        ),
+        "nickname": (
+            _pick_nonempty(
+                book_info.get("title"),
+                book_info.get("nickname"),
+                account.get("name"),
+            )
+            or ""
+        ),
+        "author": _pick_nonempty(book_info.get("author")) or "",
+        "avatar": (
+            _pick_nonempty(
+                book_info.get("cover"),
+                book_info.get("avatar"),
+                account.get("avatar"),
+            )
+            or ""
+        ),
+        "category": _pick_nonempty(book_info.get("category"), book_info.get("newRatingName")) or "",
+        "desc": _pick_nonempty(book_info.get("intro"), book_info.get("desc"), account.get("intro")) or "",
+        "deep_link": _pick_nonempty(account.get("deepLink"), book_info.get("deepLink")) or "",
+        "reader_link": _pick_nonempty(account.get("readerLink"), book_info.get("readerLink")) or "",
+        "entity_subject": None,
+        "entity_subject_available": False,
+        "article_count": None,
+    }
+
+
+def map_inspect_result_to_article(
+    inspect_data: Dict[str, Any],
+    *,
+    account_id: str = "",
+    fallback_article_url: str = "",
+) -> Optional[Dict[str, Any]]:
+    """Map the `article` section of `inspect-article` JSON output."""
+    article = inspect_data.get("article") if isinstance(inspect_data.get("article"), dict) else {}
+    account = inspect_data.get("account") if isinstance(inspect_data.get("account"), dict) else {}
+    resolved_url = _article_url(
+        article.get("url"),
+        inspect_data.get("inputUrl"),
+        fallback_article_url,
+    )
+    review_id = str(article.get("reviewId") or "").strip()
+    title = str(article.get("title") or "").strip()
+    published_at = normalize_published_at(article.get("publishedAt"))
+    if not review_id and not title and not resolved_url:
+        return None
+    resolved_account_id = account_id or str(account.get("accountId") or "")
+    if not resolved_account_id and resolved_url:
+        resolved_account_id = extract_account_id_from_article_url(resolved_url)
+    return {
+        "review_id": review_id,
+        "original_id": "",
+        "account_id": normalize_account_id(resolved_account_id) if resolved_account_id else "",
+        "title": title,
+        "summary": "",
+        "account_name": str(account.get("name") or ""),
+        "article_url": resolved_url,
+        "cover_url": "",
+        "published_at": published_at,
+        "read_count": None,
+        "like_count": None,
+    }
+
+
 def _article_url(*values: Any) -> str:
-    """Keep the real mp.weixin.qq.com article URL, unwrapping captcha redirects."""
+    """Keep only strict mp.weixin.qq.com/s article URLs with explicit `__biz=`."""
     for value in values:
         url = str(value or "").strip()
         if not url:
             continue
-        parsed = urlparse(url)
-        if parsed.hostname == "mp.weixin.qq.com" and parsed.path == "/mp/wappoc_appmsgcaptcha":
-            url = (parse_qs(parsed.query).get("target_url") or [""])[0]
-            parsed = urlparse(url)
-        if parsed.hostname == "mp.weixin.qq.com" and (
-            parsed.path == "/s" or parsed.path.startswith("/s/")
-        ):
-            return urlunparse(parsed._replace(fragment=""))
+        try:
+            return validate_article_url(url)
+        except ValueError:
+            continue
     return ""
 
 

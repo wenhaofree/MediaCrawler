@@ -54,6 +54,13 @@ GZH_ACCOUNT_IDS = [
     if item.strip()
 ]
 
+# Comma-separated WeChat article URLs (must follow https://mp.weixin.qq.com/s?...__biz=...)
+GZH_SPECIFIED_ID_LIST = [
+    item.strip()
+    for item in os.getenv("GZH_SPECIFIED_ID_LIST", "").split(",")
+    if item.strip()
+]
+
 GZH_STATS_LIMIT = max(1, min(100, int(_env_number("GZH_STATS_LIMIT", 20))))
 GZH_ARTICLES_COUNT = max(1, min(100, int(_env_number("GZH_ARTICLES_COUNT", 20))))
 GZH_REQUEST_INTERVAL_SEC = max(0.5, _env_number("GZH_REQUEST_INTERVAL_SEC", 1.5))

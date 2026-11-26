@@ -516,6 +516,8 @@ async def parse_cmd(argv: Optional[Sequence[str]] = None):
                 config.ZHIHU_SPECIFIED_ID_LIST = specified_id_list
             elif platform == PlatformEnum.QIMAI:
                 config.QIMAI_SPECIFIED_ID_LIST = specified_id_list
+            elif platform == PlatformEnum.GZH:
+                config.GZH_SPECIFIED_ID_LIST = specified_id_list
 
         if creator_id_list:
             if platform == PlatformEnum.XHS:

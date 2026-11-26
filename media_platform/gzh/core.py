@@ -17,11 +17,16 @@ from database.config_store import resolve_platform_cookie
 from media_platform.gzh.weread_cli import (
     WereadCliError,
     WereadOmniBridge,
+    biz_from_account_id,
+    extract_biz_from_article_url,
     map_book_info_to_account,
+    map_inspect_result_to_account,
+    map_inspect_result_to_article,
     map_mobile_article,
     map_stats_article,
     merge_article_sources,
     normalize_account_id,
+    validate_article_url,
 )
 from store import gzh as gzh_store
 from tools import utils
@@ -45,6 +50,8 @@ class GzhCrawler(AbstractCrawler):
             await self.get_accounts_and_articles()
         elif config.CRAWLER_TYPE == "search":
             await self.search()
+        elif config.CRAWLER_TYPE == "detail":
+            await self.get_specified_articles()
         else:
             utils.logger.warning(
                 f"[GzhCrawler.start] unsupported crawler type: {config.CRAWLER_TYPE}; use creator"
@@ -69,6 +76,20 @@ class GzhCrawler(AbstractCrawler):
             await self.crawl_one_account(str(account_id))
             await asyncio.sleep(getattr(config, "GZH_REQUEST_INTERVAL_SEC", 1.5))
 
+    async def get_specified_articles(self) -> None:
+        article_urls: List[str] = list(getattr(config, "GZH_SPECIFIED_ID_LIST", []) or [])
+        if not article_urls:
+            utils.logger.error(
+                "[GzhCrawler] GZH_SPECIFIED_ID_LIST is empty; set env or --specified_id"
+            )
+            return
+        for raw_url in article_urls:
+            try:
+                await self.crawl_by_article_url(raw_url, fetch_articles=True)
+            except Exception as exc:
+                utils.logger.error(f"[GzhCrawler] article {raw_url} failed: {exc}")
+            await asyncio.sleep(getattr(config, "GZH_REQUEST_INTERVAL_SEC", 1.5))
+
     async def get_accounts_and_articles(self) -> None:
         account_ids: List[str] = list(getattr(config, "GZH_ACCOUNT_IDS", []) or [])
         if not account_ids:
@@ -77,8 +98,16 @@ class GzhCrawler(AbstractCrawler):
             )
             return
         for raw_id in account_ids:
+            raw_text = str(raw_id or "").strip()
+            if raw_text.startswith(("http://", "https://")):
+                try:
+                    await self.crawl_by_article_url(raw_text, fetch_articles=True)
+                except Exception as exc:
+                    utils.logger.error(f"[GzhCrawler] article url {raw_text} failed: {exc}")
+                await asyncio.sleep(getattr(config, "GZH_REQUEST_INTERVAL_SEC", 1.5))
+                continue
             try:
-                account_id = normalize_account_id(raw_id)
+                account_id = normalize_account_id(raw_text)
             except ValueError as exc:
                 utils.logger.error(f"[GzhCrawler] skip invalid id {raw_id}: {exc}")
                 continue
@@ -88,6 +117,122 @@ class GzhCrawler(AbstractCrawler):
                 utils.logger.error(f"[GzhCrawler] account {account_id} failed: {exc}")
             await asyncio.sleep(getattr(config, "GZH_REQUEST_INTERVAL_SEC", 1.5))
 
+    async def resolve_account_from_article(
+        self,
+        article_url: str,
+        *,
+        enrich_book_info: bool = True,
+    ) -> Dict:
+        """Resolve official-account profile metadata from a strict WeChat article URL."""
+        normalized_url = validate_article_url(article_url)
+        biz_info = extract_biz_from_article_url(normalized_url)
+        account_id = biz_info["account_id"]
+
+        inspect_data: Dict = {}
+        try:
+            inspect_data = await self.bridge.inspect_article(normalized_url)
+        except WereadCliError as exc:
+            if "unknown command" not in str(exc).lower():
+                raise
+            utils.logger.warning(
+                f"[GzhCrawler] inspect-article unsupported by CLI, falling back to __biz={biz_info['biz']}"
+            )
+            inspect_data = {
+                "inputUrl": normalized_url,
+                "source": "biz",
+                "account": {
+                    "accountId": account_id,
+                    "biz": biz_info["biz"],
+                    "bizNumericId": biz_info["biz_numeric_id"],
+                },
+                "article": {},
+                "diagnostics": [],
+            }
+
+        book: Optional[Dict] = None
+        if enrich_book_info:
+            try:
+                book = await self.bridge.book_info(account_id)
+            except WereadCliError as exc:
+                utils.logger.warning(
+                    f"[GzhCrawler] book info unavailable for {account_id}: {exc}"
+                )
+
+        account_info = map_inspect_result_to_account(
+            inspect_data,
+            book,
+            fallback_article_url=normalized_url,
+        )
+        article_info = map_inspect_result_to_article(
+            inspect_data,
+            account_id=account_info["account_id"],
+            fallback_article_url=normalized_url,
+        )
+        return {
+            "input_url": normalized_url,
+            "source": inspect_data.get("source") or "biz",
+            "account": account_info,
+            "article": article_info,
+            "diagnostics": inspect_data.get("diagnostics") or [],
+        }
+
+    async def crawl_by_article_url(
+        self,
+        article_url: str,
+        *,
+        fetch_articles: bool = False,
+        max_articles: Optional[int] = None,
+        write_account_stats: bool = True,
+        source_type: Optional[str] = None,
+    ) -> Dict:
+        """Resolve official account from a strict article URL, save profile, and optionally crawl articles."""
+        resolved = await self.resolve_account_from_article(
+            article_url,
+            enrich_book_info=True,
+        )
+        account = resolved["account"]
+        account_id = account["account_id"]
+        source = source_type or crawler_type_var.get() or "article_inspect"
+        db_account_payload = {
+            "account_id": account_id,
+            "nickname": account.get("nickname") or "",
+            "author": account.get("author") or "",
+            "avatar": account.get("avatar") or "",
+            "category": account.get("category") or "",
+            "desc": account.get("desc") or "",
+            "article_count": None,
+        }
+
+        if fetch_articles:
+            result = await self.crawl_one_account(
+                account_id,
+                fetch_articles=True,
+                max_articles=max_articles,
+                write_account_stats=write_account_stats,
+                source_type=source,
+                fallback_account=db_account_payload,
+            )
+        else:
+            await gzh_store.save_account(db_account_payload, write_stats=False, source_type=source)
+            result = {
+                **db_account_payload,
+                "articles_saved": 0,
+                "stats_saved": False,
+                "warnings": [],
+            }
+
+        return {
+            **result,
+            "biz": account.get("biz"),
+            "biz_numeric_id": account.get("biz_numeric_id"),
+            "deep_link": account.get("deep_link"),
+            "reader_link": account.get("reader_link"),
+            "input_url": resolved["input_url"],
+            "source": resolved["source"],
+            "inspected_article": resolved.get("article"),
+            "diagnostics": resolved.get("diagnostics") or [],
+        }
+
     async def crawl_one_account(
         self,
         account_id: str,
@@ -96,12 +241,13 @@ class GzhCrawler(AbstractCrawler):
         max_articles: Optional[int] = None,
         write_account_stats: bool = True,
         source_type: Optional[str] = None,
+        fallback_account: Optional[Dict] = None,
     ) -> Dict:
         account_id = normalize_account_id(account_id)
         max_n = max_articles or getattr(config, "GZH_STATS_LIMIT", 20)
         source = source_type or crawler_type_var.get() or "creator_crawl"
 
-        account_payload = {
+        account_payload = dict(fallback_account) if fallback_account else {
             "account_id": account_id,
             "nickname": "",
             "author": "",
@@ -110,9 +256,13 @@ class GzhCrawler(AbstractCrawler):
             "desc": "",
             "article_count": None,
         }
+        account_payload["account_id"] = account_id
         try:
             book = await self.bridge.book_info(account_id)
-            account_payload = map_book_info_to_account(account_id, book)
+            mapped_book = map_book_info_to_account(account_id, book)
+            for key in ("nickname", "author", "avatar", "category", "desc"):
+                if mapped_book.get(key) or not account_payload.get(key):
+                    account_payload[key] = mapped_book.get(key) or account_payload.get(key) or ""
         except WereadCliError as exc:
             utils.logger.warning(
                 f"[GzhCrawler] book info unavailable for {account_id}: {exc}"

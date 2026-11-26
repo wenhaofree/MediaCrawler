@@ -274,9 +274,15 @@ def _normalize_creator(platform: str, raw_value: str) -> dict[str, str]:
             "xhs_xsec_source": "",
         }
     if platform == "gzh":
-        from media_platform.gzh.weread_cli import normalize_account_id
+        from media_platform.gzh.weread_cli import (
+            extract_account_id_from_article_url,
+            normalize_account_id,
+        )
 
-        account_id = normalize_account_id(value)
+        if _is_http_url(value):
+            account_id = extract_account_id_from_article_url(value)
+        else:
+            account_id = normalize_account_id(value)
         return {
             "raw_input": value,
             "normalized_creator_id": account_id,
