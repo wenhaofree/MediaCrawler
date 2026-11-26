@@ -156,6 +156,7 @@ uv run main.py \
 ### 5.1 严格的文章 URL 规则
 
 所有涉及 `gzh` 文章链接的输入（`POST /api/gzh/article/inspect`、`POST /api/gzh/account/add` 的 `article_url`、`--specified_id`、定时任务及采集落库字段 `article_url`）均严格遵循公众号长链接规则：
+
 - 必须为 `https://mp.weixin.qq.com/s?...`（支持自动解包 `/mp/wappoc_appmsgcaptcha?target_url=...` 验证码跳转，自动剥离 `#rd` 等 fragment）；
 - 禁止携带账号密码信息或自定义端口；
 - 必须包含明确且可解码为数字公众号 ID（`MP_WXS_<数字>`）的 `__biz=` 参数，以及有效的 `mid`、`sn`（若有 `idx` 须为数字）；
@@ -304,7 +305,7 @@ docker exec -it mediacrawler-gzh node /opt/weread-omni/bin/weread-omni.js \
 mkdir -p ./secrets
 umask 077
 printf '%s' '从本人微信读书 Web 会话取得的完整 Cookie' > ./secrets/weread_web_cookie.next
-mv ./secrets/weread_web_cookie.next ./secrets/weread_web_cookie
+mv ./secrets/weread_web_cookie.next ./secrets/weread_web_cookie有美国
 ```
 
 移动端登录会话不能自动换取 Web Cookie；出现“登录超时”时应暂停阅读量任务、更新该文件后再恢复，切勿做高频重试。
@@ -383,6 +384,7 @@ docker compose logs -f mediacrawler-xhs
 安全策略：Cookie 只会作为 HTTP 请求头发送；如果登录态校验失败、出现限流或账号安全限制，会立即停止当前请求，不会降级为扫码或持续重试。默认安全模式限制为单账号、单页、单并发，且在请求之间随机等待 8～15 秒；请保持该默认值，避免短时间连续运行或切换 IP。
 
 # TODO：
+
 - 添加抖音账号接口✅
 - 抖音账号快照✅（`douyin_creator_stats`）
 - 抖音视频作品快照✅（`douyin_aweme_stats`）
@@ -692,6 +694,7 @@ uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type grossi
 ## 6. 纯 API + Node 签名微服务模式 (企业级/服务器部署推荐)
 
 ### 🌟 模式背景与设计
+
 - **传统 9222 CDP 模式**：强依赖本地已启动的 Chrome 图形界面浏览器，单实例内存占用大（500MB~1GB），部署到 Linux 服务器时因无 GUI 环境极易被平台识别无头特征并拦截。
 - **纯 API 模式 (`--pure_api true`)**：彻底剥离 Playwright 与 Chrome，全链路纯异步 HTTP（`httpx`）请求，单次请求仅几 KB 内存，零浏览器崩溃与内存泄漏风险。
 - **常驻 Node.js 签名微服务**：零额外 npm 依赖，在 `services/sign_srv/server.js` 中常驻预加载 `libs/douyin.js`。提供异步 HTTP 签名接口，签名性能提升 3 倍（~14ms/次），并内置**熔断与平滑回退机制**（微服务离线时自动降级到本地 execjs，爬虫进程绝不中断）。
@@ -701,6 +704,7 @@ uv run main.py --platform qimai --lt qrcode --type rank --qimai_rank_type grossi
 ### 🚀 推荐方式与使用流程
 
 #### 1. 启动常驻 Node.js 签名微服务 (终端 1)
+
 ```bash
 # 本地或服务器后台启动（默认监听 127.0.0.1:8999）
 node services/sign_srv/server.js
@@ -710,7 +714,9 @@ pm2 start services/sign_srv/server.js --name sign-srv
 ```
 
 #### 2. 配置登录态 (推荐方式 ⭐⭐⭐⭐⭐)
+
 将登录 Cookie 写入 Git 忽略的 `.env`，避免在终端中传递超长字符串，也不要写入 `config/base_config.py`：
+
 ```ini
 # .env
 DY_COOKIES='passport_csrf_token=xxx; sessionid=你的sessionid; ttwid=xxx; ...'
@@ -719,6 +725,7 @@ DY_COOKIES='passport_csrf_token=xxx; sessionid=你的sessionid; ttwid=xxx; ...'
 > **如何获取 Cookie**：在 Chrome 浏览器中登录抖音 `https://www.douyin.com/` -> 按 `F12` 打开开发者工具切换到 **Network (网络)** 标签页 -> 刷新页面点击任一请求 -> 在右侧 **Request Headers** 中找到 `Cookie:` 右键选择 **Copy value** 即可。
 
 #### 3. 运行纯 API 采集命令 (终端 2)
+
 ```bash
 # 纯 API 采集创作者视频 (无需启动 Chrome，不占用 9222 端口)
 uv run main.py --platform dy --type creator --max_pages 3 --pure_api true --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk"
@@ -735,12 +742,14 @@ uv run main.py --platform dy --type creator --max_pages 0 --pure_api true --save
 ### 🔍 复审与质量核验方式
 
 #### 1. 签名微服务健康检查
+
 ```bash
 curl http://127.0.0.1:8999/health
 # 返回: {"status":"ok","service":"MediaCrawler-Sign-Service","douyin_loaded":true}
 ```
 
 #### 2. 自动化单元测试与降级核验
+
 ```bash
 # 验证签名服务通信、断网平滑降级机制、纯 API 参数构造与 pong 探活
 uv run pytest tests/test_sign_service.py
@@ -753,6 +762,7 @@ uv run pytest tests/
 ```
 
 #### 3. 数据落库与重复采集核验
+
 - **更新策略（Upsert）**：SQLite / MySQL / Postgres 模式下重复采集**不会跳过**，而是以最新数据（点赞、评论、分享数等）覆盖更新历史记录，并保留最初入库时间 `add_ts`。
 - **媒体文件**：已下载过的封面/视频自动比对跳过，不重复消耗带宽。
 - **时间范围筛选核验**：启动可视化服务 `uv run uvicorn api.main:app --port 8080 --reload`，访问 [http://127.0.0.1:8080/sqlite-viewer](http://127.0.0.1:8080/sqlite-viewer) 使用【自定义时间】筛选起止日期（例如 `2026-01-01` 至 `2026-12-31`）核验数据。
@@ -774,11 +784,15 @@ source .venv/bin/activate
 <!-- 启动（二选一，同一时刻只能有一个实例占用 9222 端口） -->
 
 # 选项 1：投资配置环境
+
 # open -na "Google Chrome" --args \
-#  --remote-debugging-port=9222 \
-#  --user-data-dir="$HOME/.chrome-cdp-investing"
+
+# --remote-debugging-port=9222 \
+
+# --user-data-dir="$HOME/.chrome-cdp-investing"
 
 # 选项 2：自动化爬虫环境（常用）
+
 open -na "Google Chrome" --args \
  --remote-debugging-port=9222 \
  --user-data-dir="$HOME/.chrome-automation"
@@ -786,7 +800,9 @@ open -na "Google Chrome" --args \
 <!-- 抖音 (纯 API + Node 签名微服务模式，不依赖 Chrome 也不占用 9222) -->
 
 # 终端 1 启动签名服务：node services/sign_srv/server.js
+
 # 终端 2 执行采集：
+
 uv run main.py --platform dy --type creator --max_pages 3 --pure_api true --creator_id "MS4wLjABAAAAB92s1iYJ6Kr4B6RpP3zenR2DywmkuBBX-RKYLExuNHk,MS4wLjABAAAAqW8dJX9-mXgmeucLFQW9iPwKz8LHOXBnLzscBfG-YBGLIv_lWbdPa3PUfvl9-6Q5,MS4wLjABAAAA7gvThNYc1JhDB1c-2QHBl5NkHE4kNZVMjVp542IZrqtKDikGAJIQMYIfdHujr1iU"
 
 <!-- 哔哩 -->
@@ -816,8 +832,7 @@ uv run uvicorn api.main:app --port 8080 --reload
 <!-- 数据库初始化（如需使用 PostgreSQL） -->
 
 # 确保 .env 中配置了正确的数据库连接信息，然后执行：
+
 uv run main.py --init_db postgres
 
 > 说明：抖音作者表已统一规范命名为 `douyin_creator`（原 `dy_creator` 会在建表/升级时自动无损重命名迁移，代码中保留 `DyCreator = DouyinCreator` 兼容别名）。
-
-
