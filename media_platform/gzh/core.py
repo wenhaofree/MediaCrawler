@@ -18,7 +18,9 @@ from media_platform.gzh.weread_cli import (
     WereadCliError,
     WereadOmniBridge,
     biz_from_account_id,
+    extract_account_id_from_article_url,
     extract_biz_from_article_url,
+    is_short_article_url,
     map_book_info_to_account,
     map_inspect_result_to_account,
     map_inspect_result_to_article,
@@ -123,16 +125,20 @@ class GzhCrawler(AbstractCrawler):
         *,
         enrich_book_info: bool = True,
     ) -> Dict:
-        """Resolve official-account profile metadata from a strict WeChat article URL."""
+        """Resolve official-account profile metadata from a WeChat article URL (canonical or short URL)."""
         normalized_url = validate_article_url(article_url)
-        biz_info = extract_biz_from_article_url(normalized_url)
-        account_id = biz_info["account_id"]
+        is_short = is_short_article_url(normalized_url)
+        biz_info = None
+        account_id = ""
+        if not is_short:
+            biz_info = extract_biz_from_article_url(normalized_url)
+            account_id = biz_info["account_id"]
 
         inspect_data: Dict = {}
         try:
             inspect_data = await self.bridge.inspect_article(normalized_url)
         except WereadCliError as exc:
-            if "unknown command" not in str(exc).lower():
+            if is_short or not biz_info or "unknown command" not in str(exc).lower():
                 raise
             utils.logger.warning(
                 f"[GzhCrawler] inspect-article unsupported by CLI, falling back to __biz={biz_info['biz']}"
@@ -149,8 +155,36 @@ class GzhCrawler(AbstractCrawler):
                 "diagnostics": [],
             }
 
+        if not account_id:
+            account_section = (
+                inspect_data.get("account")
+                if isinstance(inspect_data.get("account"), dict)
+                else {}
+            )
+            raw_acc_id = (
+                account_section.get("accountId")
+                or account_section.get("bookId")
+                or ""
+            )
+            if raw_acc_id:
+                account_id = normalize_account_id(str(raw_acc_id))
+            else:
+                art_section = (
+                    inspect_data.get("article")
+                    if isinstance(inspect_data.get("article"), dict)
+                    else {}
+                )
+                res_url = art_section.get("url")
+                if res_url:
+                    try:
+                        account_id = extract_account_id_from_article_url(res_url)
+                    except Exception:
+                        pass
+            if not account_id:
+                raise ValueError(f"无法从文章链接解析出公众号账号ID: {normalized_url}")
+
         book: Optional[Dict] = None
-        if enrich_book_info:
+        if enrich_book_info and account_id:
             try:
                 book = await self.bridge.book_info(account_id)
             except WereadCliError as exc:
@@ -165,12 +199,12 @@ class GzhCrawler(AbstractCrawler):
         )
         article_info = map_inspect_result_to_article(
             inspect_data,
-            account_id=account_info["account_id"],
+            account_id=account_info["account_id"] or account_id,
             fallback_article_url=normalized_url,
         )
         return {
             "input_url": normalized_url,
-            "source": inspect_data.get("source") or "biz",
+            "source": inspect_data.get("source") or ("short_url" if is_short else "biz"),
             "account": account_info,
             "article": article_info,
             "diagnostics": inspect_data.get("diagnostics") or [],

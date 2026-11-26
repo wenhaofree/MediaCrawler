@@ -69,12 +69,20 @@ def test_validate_article_url_strict_rules():
     assert extract_account_id_from_article_url(SAMPLE_ARTICLE_URL) == "MP_WXS_3560632821"
     assert extract_biz_from_article_url(SAMPLE_ARTICLE_URL)["biz"] == "MzU2MDYzMjgyMQ=="
 
+    # Short URL is accepted by validate_article_url(..., allow_short=True)
+    assert validate_article_url("https://mp.weixin.qq.com/s/shortlink#rd") == "https://mp.weixin.qq.com/s/shortlink"
+    with pytest.raises(ValueError):
+        validate_article_url("https://mp.weixin.qq.com/s/shortlink", allow_short=False)
+    with pytest.raises(ValueError):
+        extract_biz_from_article_url("https://mp.weixin.qq.com/s/shortlink")
+
     for bad_url in [
         "",
         "http://mp.weixin.qq.com/s?__biz=MzU2MDYzMjgyMQ==&mid=2247495310&idx=1&sn=abc",
         "https://user:pass@mp.weixin.qq.com/s?__biz=MzU2MDYzMjgyMQ==&mid=2247495310&idx=1&sn=abc",
         "https://mp.weixin.qq.com:8443/s?__biz=MzU2MDYzMjgyMQ==&mid=2247495310&idx=1&sn=abc",
-        "https://mp.weixin.qq.com/s/shortlink",
+        "https://mp.weixin.qq.com/other/path",
+        "https://mp.weixin.qq.com/s/too/many/slashes",
         "https://mp.weixin.qq.com/s?id=article-1",
         "https://mp.weixin.qq.com/s?mid=2247495310&idx=1&sn=b7c5d46309bf3c40a574c8843ef141d5",
         "https://mp.weixin.qq.com/s?__biz=YWJj&mid=2247495310&idx=1&sn=b7c5d46309bf3c40a574c8843ef141d5",
@@ -178,10 +186,12 @@ async def test_review_single_returns_review_detail(monkeypatch):
 async def test_inspect_article_validates_url_and_calls_cli(monkeypatch):
     bridge = weread_cli.WereadOmniBridge.__new__(weread_cli.WereadOmniBridge)
 
+    calls = []
+
     async def fake_run_json(args):
-        assert args == ["public-accounts", "inspect-article", SAMPLE_ARTICLE_URL]
+        calls.append(args)
         return {
-            "inputUrl": SAMPLE_ARTICLE_URL,
+            "inputUrl": args[-1],
             "source": "biz+resolve-article",
             "account": {"accountId": "MP_WXS_3560632821", "name": "Python面试官+"},
             "article": {"reviewId": "r1", "title": "示例"},
@@ -190,6 +200,12 @@ async def test_inspect_article_validates_url_and_calls_cli(monkeypatch):
     monkeypatch.setattr(bridge, "run_json", fake_run_json)
     result = await bridge.inspect_article(f"{SAMPLE_ARTICLE_URL}#rd")
     assert result["account"]["accountId"] == "MP_WXS_3560632821"
+    assert calls[-1] == ["public-accounts", "inspect-article", SAMPLE_ARTICLE_URL]
+
+    short_url = "https://mp.weixin.qq.com/s/short-without-biz"
+    result_short = await bridge.inspect_article(f"{short_url}#rd")
+    assert result_short["account"]["accountId"] == "MP_WXS_3560632821"
+    assert calls[-1] == ["public-accounts", "inspect-article", short_url]
 
     with pytest.raises(ValueError):
-        await bridge.inspect_article("https://mp.weixin.qq.com/s/short-without-biz")
+        await bridge.inspect_article("https://mp.weixin.qq.com/s?invalid_no_biz=1")

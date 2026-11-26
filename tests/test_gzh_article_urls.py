@@ -271,3 +271,58 @@ async def test_crawl_by_article_url_falls_back_when_cli_lacks_inspect_command(mo
     assert result["author"] == "作者A"
     assert saved[0]["account_id"] == "MP_WXS_3560632821"
     assert "biz" not in saved[0]
+
+
+@pytest.mark.asyncio
+async def test_resolve_account_from_short_article_url():
+    short_url = "https://mp.weixin.qq.com/s/vYRg2rDw2sK91dltSuWl0Q"
+
+    class FakeBridge:
+        async def inspect_article(self, article_url):
+            assert article_url == short_url
+            return {
+                "inputUrl": short_url,
+                "source": "weread_mp_review_id",
+                "account": {
+                    "accountId": "MP_WXS_3271041950",
+                    "biz": "MzI3MTA0MTk1MA==",
+                    "bizNumericId": "3271041950",
+                    "name": "新智元",
+                    "avatar": "https://wx.qlogo.cn/xzy.jpg",
+                },
+                "article": {
+                    "title": "刚刚，Anthropic全球最大IPO敲钟 ！",
+                    "url": "https://mp.weixin.qq.com/s?__biz=MzI3MTA0MTk1MA==&mid=2652150000&idx=1&sn=1234567890abcdef1234567890abcdef",
+                    "reviewId": "MP_WXS_3271041950_1",
+                    "publishedAt": 1740618000,
+                },
+                "diagnostics": [],
+            }
+
+        async def book_info(self, account_id):
+            assert account_id == "MP_WXS_3271041950"
+            return {
+                "bookId": "MP_WXS_3271041950",
+                "title": "新智元",
+                "author": "新智元编辑部",
+                "cover": "https://wx.qlogo.cn/xzy_book.jpg",
+                "intro": "聚焦人工智能与前沿科技",
+            }
+
+    crawler = GzhCrawler.__new__(GzhCrawler)
+    crawler.bridge = FakeBridge()
+    resolved = await crawler.resolve_account_from_article(f"{short_url}#rd")
+
+    assert resolved["input_url"] == short_url
+    assert resolved["source"] == "weread_mp_review_id"
+    assert resolved["account"]["account_id"] == "MP_WXS_3271041950"
+    assert resolved["account"]["biz"] == "MzI3MTA0MTk1MA=="
+    assert resolved["account"]["biz_numeric_id"] == "3271041950"
+    assert resolved["account"]["nickname"] == "新智元"
+    assert resolved["account"]["author"] == "新智元编辑部"
+    assert resolved["article"]["title"] == "刚刚，Anthropic全球最大IPO敲钟 ！"
+    assert resolved["article"]["account_id"] == "MP_WXS_3271041950"
+    assert resolved["article"]["article_url"] == (
+        "https://mp.weixin.qq.com/s?__biz=MzI3MTA0MTk1MA==&mid=2652150000&idx=1&sn=1234567890abcdef1234567890abcdef"
+    )
+

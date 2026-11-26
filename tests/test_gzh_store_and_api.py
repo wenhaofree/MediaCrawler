@@ -106,10 +106,68 @@ async def test_add_gzh_account_saves_account_without_articles(monkeypatch):
 async def test_inspect_gzh_article_rejects_url_without_biz():
     with pytest.raises(gzh_api.HTTPException) as exc:
         await gzh_api.inspect_gzh_article(
-            gzh_api.InspectArticleRequest(article_url="https://mp.weixin.qq.com/s/short-only")
+            gzh_api.InspectArticleRequest(article_url="https://mp.weixin.qq.com/s?id=invalid-no-biz")
         )
     assert exc.value.status_code == 400
     assert "__biz" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_inspect_gzh_article_supports_short_url(monkeypatch):
+    short_url = "https://mp.weixin.qq.com/s/vYRg2rDw2sK91dltSuWl0Q"
+
+    class FakeBridge:
+        web_cookie = ""
+
+        def __init__(self, **_kwargs):
+            pass
+
+    class FakeCrawler:
+        bridge = None
+
+        async def resolve_account_from_article(self, article_url, *, enrich_book_info=True):
+            assert article_url == short_url
+            assert enrich_book_info is True
+            return {
+                "input_url": article_url,
+                "source": "weread_mp_review_id",
+                "account": {
+                    "account_id": "MP_WXS_3271041950",
+                    "biz": "MzI3MTA0MTk1MA==",
+                    "biz_numeric_id": "3271041950",
+                    "nickname": "新智元",
+                    "author": "新智元编辑部",
+                    "avatar": "https://wx.qlogo.cn/avatar.jpg",
+                    "category": "科技",
+                    "desc": "简介",
+                    "deep_link": "",
+                    "reader_link": "",
+                    "entity_subject": None,
+                    "entity_subject_available": False,
+                },
+                "article": {
+                    "review_id": "MP_WXS_3271041950_1",
+                    "title": "刚刚，Anthropic全球最大IPO敲钟 ！",
+                    "article_url": "https://mp.weixin.qq.com/s?__biz=MzI3MTA0MTk1MA==&mid=2652150000&idx=1&sn=1234567890abcdef1234567890abcdef",
+                    "published_at": 1740618000,
+                },
+                "diagnostics": [],
+            }
+
+    monkeypatch.setattr(gzh_api, "WereadOmniBridge", FakeBridge)
+    monkeypatch.setattr(gzh_api, "GzhCrawler", FakeCrawler)
+
+    response = await gzh_api.inspect_gzh_article(
+        gzh_api.InspectArticleRequest(article_url=f"{short_url}#rd")
+    )
+
+    assert response["code"] == 200
+    assert response["data"]["source"] == "weread_mp_review_id"
+    assert response["data"]["account"]["account_id"] == "MP_WXS_3271041950"
+    assert response["data"]["account"]["biz"] == "MzI3MTA0MTk1MA=="
+    assert response["data"]["account"]["nickname"] == "新智元"
+    assert response["data"]["article"]["title"] == "刚刚，Anthropic全球最大IPO敲钟 ！"
+
 
 
 @pytest.mark.asyncio

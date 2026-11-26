@@ -24,10 +24,20 @@ from tools import utils
 ACCOUNT_ID_RE = re.compile(r"^MP_WXS_\d+$")
 BIZ_BASE64_RE = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
 ARTICLE_SN_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+SHORT_ARTICLE_PATH_RE = re.compile(r"^/s/[A-Za-z0-9_-]+$")
 
 
 class WereadCliError(RuntimeError):
     """Raised when weread-omni CLI fails or returns invalid JSON."""
+
+
+def is_short_article_url(url: str) -> bool:
+    """Return True if url is an mp.weixin.qq.com/s/<short_code> short link."""
+    try:
+        parsed = _parse_strict_mp_url(url)
+        return bool(SHORT_ARTICLE_PATH_RE.match(parsed.path))
+    except Exception:
+        return False
 
 
 def normalize_account_id(raw: str) -> str:
@@ -395,16 +405,15 @@ def _parse_strict_mp_url(url: str):
     return parsed
 
 
-def validate_article_url(url: str) -> str:
+def validate_article_url(url: str, allow_short: bool = True) -> str:
     """
     Strictly validate and normalize a WeChat Official Account article URL.
 
     Rules:
     - HTTPS mp.weixin.qq.com without credentials or custom port
     - Unwraps /mp/wappoc_appmsgcaptcha?target_url=... redirects
-    - Path must be /s
-    - Must contain an explicit, valid `__biz=` parameter (base64 numeric official-account ID)
-    - Must contain valid `mid` (digits) and `sn` (alphanumeric/_/-), and numeric `idx` if present
+    - Supports canonical long URLs (/s with __biz=, mid=, sn=)
+    - Supports short URLs (/s/<short_code>) when allow_short=True
     - Strips URL fragment (e.g. #rd)
     """
     parsed = _parse_strict_mp_url(url)
@@ -414,9 +423,12 @@ def validate_article_url(url: str) -> str:
             raise ValueError("验证码跳转链接缺少 target_url 参数")
         parsed = _parse_strict_mp_url(target_url)
 
+    if allow_short and SHORT_ARTICLE_PATH_RE.match(parsed.path):
+        return urlunparse(parsed._replace(fragment=""))
+
     if parsed.path != "/s":
         raise ValueError(
-            "文章链接严格遵循公众号长链接规则，路径必须为 /s 且包含明确的 __biz= 参数"
+            "文章链接必须为 https://mp.weixin.qq.com/s/... 短链接或包含明确 __biz= 的长链接"
         )
 
     query = parse_qs(parsed.query, keep_blank_values=False)
@@ -441,8 +453,10 @@ def validate_article_url(url: str) -> str:
 
 
 def extract_biz_from_article_url(url: str) -> Dict[str, str]:
-    """Validate an article URL and return its `__biz`, numeric ID, and `MP_WXS_*` ID."""
-    normalized = validate_article_url(url)
+    """Validate a long article URL and return its `__biz`, numeric ID, and `MP_WXS_*` ID."""
+    if is_short_article_url(url):
+        raise ValueError("短链接未包含 __biz 参数，需先通过 inspect-article 解析")
+    normalized = validate_article_url(url, allow_short=False)
     parsed = urlparse(normalized)
     raw_biz = (parse_qs(parsed.query).get("__biz") or [""])[0]
     biz_info = parse_biz_value(raw_biz)
@@ -489,9 +503,12 @@ def map_inspect_result_to_account(
         or ""
     )
     if not raw_account_id and fallback_article_url:
-        raw_account_id = extract_account_id_from_article_url(fallback_article_url)
-    account_id = normalize_account_id(str(raw_account_id))
-    biz_info = biz_from_account_id(account_id)
+        try:
+            raw_account_id = extract_account_id_from_article_url(fallback_article_url)
+        except Exception:
+            pass
+    account_id = normalize_account_id(str(raw_account_id)) if raw_account_id else ""
+    biz_info = biz_from_account_id(account_id) if account_id else {"biz": "", "biz_numeric_id": ""}
 
     return {
         "account_id": account_id,
@@ -548,7 +565,10 @@ def map_inspect_result_to_article(
         return None
     resolved_account_id = account_id or str(account.get("accountId") or "")
     if not resolved_account_id and resolved_url:
-        resolved_account_id = extract_account_id_from_article_url(resolved_url)
+        try:
+            resolved_account_id = extract_account_id_from_article_url(resolved_url)
+        except Exception:
+            pass
     return {
         "review_id": review_id,
         "original_id": "",
@@ -571,7 +591,7 @@ def _article_url(*values: Any) -> str:
         if not url:
             continue
         try:
-            return validate_article_url(url)
+            return validate_article_url(url, allow_short=False)
         except ValueError:
             continue
     return ""
